@@ -149,6 +149,23 @@ i.coin { display: inline-block; width: .9em; height: .9em; border-radius: 50%; b
 .ibtn:active:not(:disabled) { transform: translateY(2px); box-shadow: none; }
 .ibtn:focus-visible { outline: 3px solid #e9d7a9; outline-offset: 2px; }
 
+/* trophies: brass medals with illuminated initials, and a parchment toast when one is earned */
+.troph-list { width: min(760px, 100%); flex: 0 1 auto; min-height: 0; margin-block: 10px; padding-block: 8px; }
+.troph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.troph { display: flex; align-items: center; gap: 8px; text-align: left; padding: 5px 6px; border-radius: 4px; background: rgba(255, 248, 230, .32); border: 2px solid rgba(91, 65, 40, .55); }
+.troph.off { opacity: .72; }
+.troph b { display: block; font-size: clamp(12px, 3.6vh, 15px); }
+.troph small { display: block; font-size: clamp(11px, 3.2vh, 13px); color: var(--ink-soft); font-weight: 600; }
+.medal { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-family: var(--f-title); font-size: 22px; line-height: 1; color: #5e241d;
+  background: radial-gradient(circle at 35% 30%, #f6e2a0 0 14%, #d4b05a 40%, #8f6f34 75%); border: 2px solid #3a2a1e; box-shadow: inset 0 0 0 2px rgba(255, 240, 200, .35), 0 2px 0 #1a120c; }
+.medal.off { color: #4f4a43; background: radial-gradient(circle at 35% 30%, #aba59a, #7d776c 60%, #575249); }
+.toast { position: fixed; z-index: 35; top: max(56px, env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px 6px 8px; font-family: var(--f-ui); color: var(--ink); text-align: left; pointer-events: none; animation: toastIn .35s ease-out;
+  background: radial-gradient(ellipse at 50% 35%, #ebdfc0 35%, #d2bd91 100%); border: 2px solid #5b4128; border-radius: 4px; box-shadow: inset 0 0 10px rgba(110, 72, 30, .3), 0 6px 16px rgba(0, 0, 0, .5); }
+.toast small { display: block; font-size: 11px; font-weight: 700; color: var(--red); letter-spacing: .04em; }
+.toast b { display: block; font-size: 15px; }
+@keyframes toastIn { from { transform: translateY(-14px); opacity: 0; } }
+
 /* turn-your-phone overlay */
 #rotate { z-index: 40; background: linear-gradient(#1b2232, #3c3a44); }
 #rotate .tagline { color: #e6d9b8; }
@@ -179,8 +196,20 @@ i.coin { display: inline-block; width: .9em; height: .9em; border-radius: 50%; b
     <button id="btn-back" class="btn wood small" type="button">Back</button>
     <span class="purse" aria-label="Coins"><i class="coin"></i><span id="coin-total">0</span></span>
     <button id="btn-shop" class="btn brass small" type="button">Shop</button>
+    <button id="btn-troph" class="btn brass small" type="button">Trophies</button>
   </div>
 </section>
+
+<section id="scr-troph" class="screen" data-screen hidden>
+  <h2 class="ribbon">Trophies</h2>
+  <div class="scroll troph-list">
+    <p id="troph-count" class="shop-note"></p>
+    <div id="troph-items" class="shop-items"></div>
+  </div>
+  <button id="troph-back" class="btn wood small" type="button">Back</button>
+</section>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden><span id="toast-medal" class="medal" aria-hidden="true"></span><span><small>Trophy earned</small><b id="toast-name"></b></span></div>
 
 <section id="scr-shop" class="screen" data-screen hidden>
   <div class="shop">
@@ -263,8 +292,8 @@ const MESSAGES = {
   levelComplete: ["The path is clear. On to the next land."],
   swordUpgrade:  ["My sword is now {sword}!"],
   gameComplete:  ["The dragon is gone. Time to rest... with Kitty."],
-  bowTip:        ["My bow: hold the strike button, slide back to aim, let go to shoot."],
-  bowTipKeys:    ["My bow: hold J to draw. Longer means stronger. Let go to shoot."]
+  bowTip:        ["My bow: hold the strike button and drag to aim. Let go to shoot."],
+  bowTipKeys:    ["My bow: hold J and aim with the arrows. Let go to shoot."]
 };
 /* who says each message: 'knight' (default), 'cat' or 'boss' */
 const SPEAKER_OF = { bossAppear: 'boss', catHello: 'cat', catBye: 'cat' };
@@ -297,6 +326,22 @@ const SHOP = {
     { id: 'crown', name: 'Tiny Crown', price: 120 }
   ]
 };
+
+/* ---------- trophies (counters live in save.tally) ---------- */
+const TROPHIES = [
+  { id: 'first', name: 'First Blood', desc: 'Defeat your first foe.' },
+  { id: 'wolf', name: 'Wolf Hunter', desc: 'Defeat 30 wolves.', stat: 'wolves', goal: 30 },
+  { id: 'bandit', name: 'Bandit Bane', desc: 'Defeat 40 bandits or archers.', stat: 'bandits', goal: 40 },
+  { id: 'ogre', name: 'Ogre Slayer', desc: 'Defeat Grumbold the Ogre.' },
+  { id: 'dknight', name: 'Knight vs Knight', desc: 'Defeat the Dark Knight.' },
+  { id: 'dragon', name: 'Dragon Slayer', desc: 'Defeat Ember the Dragon.' },
+  { id: 'untouch', name: 'Untouchable', desc: 'Finish a level without losing a heart.' },
+  { id: 'eye', name: 'Sharp Eye', desc: 'Hit 25 arrows.', stat: 'arrows', goal: 25 },
+  { id: 'wall', name: 'Shield Wall', desc: 'Block 40 attacks.', stat: 'blocks', goal: 40 },
+  { id: 'nopot', name: 'No Potions Needed', desc: 'Beat the dragon\'s land without drinking a potion.' },
+  { id: 'rich', name: 'Rich Traveler', desc: 'Own 300 coins.', stat: 'coins', goal: 300 },
+  { id: 'hero', name: 'Kitty\'s Hero', desc: 'Finish the game.' }
+];
 
 /* ---------- world (1 world unit = 1 pixel of the pixel-art buffer) ---------- */
 const H = 360, GROUND = 300, WORLD_W = 960;
@@ -353,7 +398,8 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('knightspath_' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('knightspath_' + k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } }
 };
-const save = Object.assign({ unlocked: 1, stars: [0, 0, 0], coins: 0, music: true, sfx: true, tutorial: false, potions: 0, owned: [] }, store.get('save', {}));
+const save = Object.assign({ unlocked: 1, stars: [0, 0, 0], coins: 0, music: true, sfx: true, tutorial: false, potions: 0, owned: [], introSeen: false, trophies: [] }, store.get('save', {}));
+save.tally = Object.assign({ kills: 0, wolves: 0, bandits: 0, arrows: 0, blocks: 0 }, save.tally);
 save.look = Object.assign({ armor: 'steel', cape: 'crimson', kitty: 'none' }, save.look);
 function persist() { store.set('save', save); }
 function buzz(ms) { try { if (save.sfx && navigator.vibrate && navigator.userActivation && navigator.userActivation.hasBeenActive) navigator.vibrate(ms); } catch (e) { /* not supported */ } }
@@ -1011,6 +1057,11 @@ const Snd = (() => {
     setSfx(v) { save.sfx = !!v; persist(); if (!ac) return; const t = ac.currentTime; sfxBus.gain.setTargetAtTime(v ? SFX_LVL : 0, t, 0.05); wetS.gain.setTargetAtTime(v ? SFX_LVL : 0, t, 0.05); },
     ambience(theme) { theme = theme || null; if (ac && amb && theme && amb.theme === theme) return; ambWant = theme; if (ac) { try { startAmb(theme); } catch (e) { /* ignore */ } } },
     ui() { if (on()) wood(now(), 0.3); },
+    dash() { if (on()) whoosh(now(), 0.3, 0.32, 260, 1500, { Q: 1.2 }); },   // dodge roll
+    thunder(v) {   // distant rumble (weather); v = loudness 0..1
+      if (!on()) return; const t = now(); v = v == null ? 1 : v;
+      nz(t, 2.6, 0.32 * v, { buf: brownBuf, type: 'lowpass', f: 170, f1: 55, a: 0.3 }); nz(t + 0.1, 1.5, 0.12 * v, { buf: brownBuf, type: 'lowpass', f: 480, f1: 120, a: 0.06 });
+    },
     start() { if (!on()) return; const t = now(); nz(t, 0.42, 0.1, { type: 'bandpass', f: 2500, f1: 6000, Q: 3, a: 0.06 }); metal(t + 0.36, 2200, BAR, 0.05, 1.2, { rev: 0.4 }); davul(t, 0.45, sfxBus); },
     clouds(o) { if (!on()) return; const t = now(); nz(t, 1.1, 0.16, { buf: brownBuf, type: 'bandpass', f: o ? 900 : 250, f1: o ? 220 : 900, Q: 0.6, a: 0.3 }); nz(t + 0.1, 0.9, 0.06, { type: 'bandpass', f: o ? 1400 : 500, f1: o ? 400 : 1300, Q: 0.5, a: 0.3 }); },
     butterflies() { if (!on()) return; const t = now(); for (let i = 0; i < 22; i++) nz(t + i * 0.06 + Math.random() * 0.02, 0.03, 0.03, { type: 'bandpass', f: rand(1400, 2600), Q: 1.5, a: 0.006 });
@@ -2132,7 +2183,7 @@ function shieldFront(S, cx, cy) {
    P: { flash, rot, crouch, bob, lean, feet:[nx,ny,fx,fy], arm, reach, wpn, weapon:'sword'|'axe'|'bow'|'none',
         off:'down'|'block'|'bow', bowAng, bowDraw, nock, cape }                                                  */
 function drawHuman(ctx, x, y, face, P, K, W) {
-  spr(ctx, x, y, face, { s: K.s, flash: P.flash, rot: P.rot || 0, px: 0, py: -6 });
+  spr(ctx, x, y, face, { s: K.s, flash: P.flash, rot: P.rot || 0, px: 0, py: P.pivot || -6 });
   const cr = P.crouch || 0, hipY = -20 + Math.round(cr * 5) + (P.bob || 0), shY = hipY - 14, ln = Math.round(P.lean || 0);
   const ft = P.feet || IDLE_FEET, off = P.off || 'down', shNx = 1 + ln, shNy = shY + 2, shFx = -2 + ln, shFy = shY + 2;
   if (K.cape) capeDraw(K, shY, hipY, ln, P.cape || 0);
@@ -2541,7 +2592,7 @@ function startLevel(i, cp) {
   if (!cp) checkpoint = null;
   G = { li: i, L, th, t: 0, time: cp ? cp.time : 0, hero: makeHero(), enemies: [], projs: [], pickups: [], parts: [], dust: [], fx: [], texts: [],
         amb: makeAmbient(th), phase: cp ? 'checkpoint' : 'intro', phaseT: 0, waveIdx: -1, queue: [], spawnT: 0, spawnSide: 1,
-        boss: null, egg: null, banner: null, cat: null, pet: null, cut: true, coins: cp ? cp.coins : 0, camX: 0, lastCam: 0, shake: 0, kx: 0, ky: 0,
+        boss: null, egg: null, banner: null, cat: null, pet: null, cut: true, coins: cp ? cp.coins : 0, potUsed: !!(cp && cp.pot), camX: 0, lastCam: 0, shake: 0, kx: 0, ky: 0,
         hitstop: 0, slow: 1, slowT: 0, flash: 0, heartHit: 0, said: {}, flags: {}, cp: cp || null };
   const h = G.hero;
   G.cat = i === 0 && !cp ? { x: h.x + 16, y: GROUND, face: -1, state: 'sit', t: 0, anim: 0 } : null;   // the cat only greets you at the start of level 1
@@ -2605,7 +2656,7 @@ function physics(e, dt, plat) {
   if (e.y >= GROUND) { e.y = GROUND; e.vy = 0; e.onGround = true; return; }
   if (plat && e.vy >= 0) for (const p of G.L.plats) { if (py <= p.y + 0.5 && e.y >= p.y && e.x > p.x - 6 && e.x < p.x + p.w + 6) { e.y = p.y; e.vy = 0; e.onGround = true; break; } }
 }
-const hRect = (h) => { const hh = h.block || h.petting ? 32 : h.h; return { x0: h.x - h.w / 2, x1: h.x + h.w / 2, y0: h.y - hh, y1: h.y }; };
+const hRect = (h) => { const hh = h.block || h.petting || h.roll ? 32 : h.h; return { x0: h.x - h.w / 2, x1: h.x + h.w / 2, y0: h.y - hh, y1: h.y }; };
 const eRect = (e) => ({ x0: e.x - e.w / 2, x1: e.x + e.w / 2, y0: e.y - e.h, y1: e.y });
 const rectsHit = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
 const frontBox = (e, reach, hgt) => (e.face > 0 ? { x0: e.x, x1: e.x + reach, y0: e.y - hgt, y1: e.y } : { x0: e.x - reach, x1: e.x, y0: e.y - hgt, y1: e.y });
@@ -2618,8 +2669,12 @@ function updateHero(dt) {
   if (h.dead) { h.deadT += dt; h.vx = approach(h.vx, 0, 400 * dt); physics(h, dt, true); return; }
   let inp = Input.read();
   if (G.cut || h.petting || G.catScene) { inp = NOINP; h.bow = null; }
+  if (h.weapon === 'bow' && inp.kHeld) inp = Object.assign({}, inp, { x: 0, y: 0 });   // keyboard: the arrow keys aim the bow while J is held
   if (inp.swap) swapWeapon(h);
   if (inp.potion) drinkPotion(h);
+  h.rollCd = Math.max(0, (h.rollCd || 0) - dt);
+  if (inp.roll && !h.roll && h.rollCd <= 0 && h.onGround && !h.block && !(inp.y > 0.55) && h.hurtT <= 0) startRoll(h, inp.roll);
+  if (h.roll) { updateRoll(h, dt); return; }
   const up =inp.y < -0.5, down = inp.y > 0.55, ax = Math.abs(inp.x);
   let mx = ax > 0.18 ? Math.sign(inp.x) * Math.min(1, (ax - 0.18) / 0.5) : 0;
   const wasBlock = h.block;
@@ -2646,6 +2701,18 @@ function updateHero(dt) {
     const a = Math.sin(h.runPhase); h.runPhase += Math.abs(h.vx) * dt * 0.075;
     if ((a < 0) !== (Math.sin(h.runPhase) < 0)) { sfx('step'); if (Math.random() < 0.3) dust(h.x - h.face * 4, h.y, 1); }
   }
+}
+/* dodge roll: about 90 units in 0.35 s, invulnerable for the first 0.3 s, then a 0.6 s cooldown */
+const ROLL_T = 0.35, ROLL_V = 90 / ROLL_T;
+function startRoll(h, dir) {
+  h.roll = { t: 0, dir }; h.face = dir; h.inv = Math.max(h.inv, 0.3); h.rollCd = ROLL_T + 0.6;
+  h.atk = null; h.bow = null; h.queued = false; h.lungeT = 0; h.block = false;
+  sfx('dash'); dust(h.x, h.y, 6, true); G.rolls = (G.rolls || 0) + 1;
+}
+function updateRoll(h, dt) {
+  const r = h.roll; r.t += dt; h.vx = r.dir * ROLL_V;
+  physics(h, dt, true); h.x = clamp(h.x, 12, WORLD_W - 12);
+  if (r.t >= ROLL_T) { h.roll = null; h.vx = r.dir * 60; dust(h.x, h.y, 3); }
 }
 function swapWeapon(h) {
   h.weapon = h.weapon === 'sword' ? 'bow' : 'sword'; h.atk = null; h.queued = false; h.bow = null;
@@ -2701,11 +2768,10 @@ function solveAim(dx, dy, v, g) {
   if (disc < 0) return -0.75;
   return -Math.atan2(v2 - Math.sqrt(disc), g * dx);
 }
-function autoAim(h, pow) {
-  const tg = findAimTarget(h); if (!tg) return null;
-  const o = bowOrigin(h, -0.1);
-  return clamp(solveAim((tg.x - o.x) * h.face, tg.y - o.y, arrowSpeed(pow), arrowGrav(pow)), -1.3, 0.6);
-}
+/* bow, manual only: the fight button becomes an aim stick. The drag direction from the button's center IS the aim
+   (full circle; the knight turns to face it), power builds with hold time, release to shoot. Released at the
+   center = straight ahead. Keyboard: hold J, aim with the arrow keys, let go. */
+const AIM_DEAD = 16;
 function bowInput(h, inp, dt) {
   if (h.hurtT > 0) { h.bow = null; return; }
   if (inp.hit && !h.bow && h.bowCd > 0) h.bowQ = G.t;                          // tapped during the short cooldown: remember it
@@ -2713,25 +2779,16 @@ function bowInput(h, inp, dt) {
   if (queued) h.bowQ = 0;
   if ((inp.hit || queued) && !h.bow && h.bowCd <= 0) {
     if (h.arrows <= 0) { sfx('ui'); h.bowCd = 0.6; if (!G.said.noArrows || G.t - G.said.noArrows > 8) { G.said.noArrows = G.t; say('noArrows'); } }
-    else { h.bow = { t: 0, pow: 0, ang: h.lastAng || -0.05, manual: false, pull: 0, full: false }; sfx('draw'); }
+    else { h.bow = { t: 0, pow: 0, ang: 0, full: false }; sfx('draw'); }
   }
   const B = h.bow; if (!B) return;
   B.t += dt;
-  const ag = inp.aim, len = ag ? Math.hypot(ag.dx, ag.dy) : 0;
-  if (len > 14) B.manual = true;
-  if (B.manual && ag) {
-    if (len > 4) { const wx = -ag.dx, wy = -ag.dy; if (Math.abs(wx) > len * 0.12) h.face = wx > 0 ? 1 : -1; B.ang = clamp(Math.atan2(wy, Math.abs(wx)), -1.35, 0.7); }
-    B.pull = clamp(len / 64, 0, 1);
-  }
-  const charge = clamp(B.t / 0.75, 0, 1);
-  B.pow = B.manual ? charge * (0.3 + 0.7 * B.pull) : charge;
-  if (!B.manual) { const a = autoAim(h, Math.max(B.pow, 0.35)); B.ang = a == null ? approach(B.ang, -0.08, dt * 2) : a; }
+  const ag = inp.aim || inp.kAim, len = ag ? Math.hypot(ag.dx, ag.dy) : 0;
+  if (len > AIM_DEAD) { if (Math.abs(ag.dx) > len * 0.08) h.face = ag.dx > 0 ? 1 : -1; B.ang = Math.atan2(ag.dy, Math.abs(ag.dx)); }
+  else if (inp.aim) B.ang = 0;                                         // thumb back at the center: straight ahead
+  B.pow = clamp(B.t / 0.75, 0, 1);
   if (B.pow >= 0.97 && !B.full) { B.full = true; sfx('bowCharge'); const o = bowOrigin(h, B.ang); burst(o.x, o.y, 7, '#cdeeff', 0.2); }
-  if (!inp.hitHeld) {
-    let pow = Math.max(B.pow, 0.25), ang = B.ang;
-    if (!B.manual && B.t < 0.2) { pow = 0.62; const a = autoAim(h, pow); ang = a == null ? -0.06 : a; }
-    h.bow = null; h.bowCd = 0.18; fireArrow(h, ang, pow);
-  }
+  if (!inp.hitHeld) { h.bow = null; h.bowCd = 0.18; fireArrow(h, B.ang, Math.max(B.pow, 0.25)); }
 }
 function fireArrow(h, ang, pow) {
   if (h.arrows <= 0) return;
@@ -2743,25 +2800,17 @@ function fireArrow(h, ang, pow) {
   h.bowRel = 0.2; h.lastAng = ang;
   if (h.arrows === 3) say('lowArrows');
 }
-function findAimTarget(h) {
-  let best = null, bd = 1e9;
-  for (const e of G.enemies) {
-    if (e.gone || e.hidden || e.invuln) continue;
-    const tx = e.x, ty = e.y - e.h / 2, dx = (tx - h.x) * h.face; if (dx < 10 || dx > 560) continue;
-    const d = dx + Math.abs(ty - h.y) * 0.5; if (d < bd) { bd = d; best = { x: tx, y: ty }; }
-  }
-  return best;
-}
 function hurtHero(dmg, srcX, o) {
   o = o || {}; const h = G.hero;
   if (h.dead || h.inv > 0 || G.phase === 'victory' || G.phase === 'bossDying' || h.petting) return false;
   const front = Math.sign(srcX - h.x) === h.face || Math.abs(srcX - h.x) < 2;
   if (h.block && front && !o.unblockable) {
     clang(h.x + h.face * 9, h.y - 22, '#f1e3b8'); kick(-h.face, o.heavy ? 3 : 1.5); h.vx = -h.face * (o.heavy ? 260 : 150); dust(h.x, h.y, 3);
+    tally('blocks');
     if (!o.heavy) { h.inv = 0.15; return 'blocked'; }
     dmg *= 0.25;
   }
-  h.hp = Math.max(0, h.hp - dmg); h.inv = 1.0; h.flash = 0.18; h.hurtT = 0.22;
+  h.hp = Math.max(0, h.hp - dmg); G.lowHp = Math.min(G.lowHp == null ? h.maxHp : G.lowHp, h.hp); h.inv = 1.0; h.flash = 0.18; h.hurtT = 0.22;
   h.vx = (Math.sign(h.x - srcX) || -h.face) * 230; h.vy = -230; h.onGround = false; h.atk = null; h.bow = null; h.queued = false;
   sfx('hurt'); buzz(45); kick(Math.sign(h.x - srcX) || -h.face, 4); G.heartHit = 0.35;
   floatText(h.x, h.y - 54, '-' + Math.max(1, Math.round(dmg)), '#e0705e', 13); sparks(h.x, h.y - 26, 6, '#e8d8c0');
@@ -2816,8 +2865,9 @@ function deathSound(t) {
   else if (!sfx('banditDie')) sfx('enemyDie');
 }
 function killEnemy(e, dir) {
-  if (e.boss) { startBossDeath(e); return; }
+  if (e.boss) { startBossDeath(e); const id = { ogre: 'ogre', darkknight: 'dknight', dragon: 'dragon' }[e.type]; if (id) award(id); return; }
   e.gone = true; dissolve(e, dir || 1, false); deathSound(e.type);
+  award('first'); tally('kills'); if (e.type === 'wolf') tally('wolves'); else if (e.type === 'bandit' || e.type === 'archer') tally('bandits');
   const n = Math.random() < 0.25 ? 2 : 1; for (let i = 0; i < n; i++) dropPickup('coin', e.x, e.y - e.h / 2);
   const h = G.hero;
   if (h.hp < h.maxHp && Math.random() < 0.16) dropPickup('heart', e.x, e.y - e.h / 2);
@@ -2980,7 +3030,7 @@ function updateProjs(dt) {
         if (e.gone || e.hidden || (p.hits && p.hits.includes(e))) continue;
         const r = eRect(e);
         if (p.x > r.x0 - 4 && p.x < r.x1 + 4 && p.y > r.y0 - 4 && p.y < r.y1 + 4) {
-          const res = damageEnemy(e, p.dmg, Math.sign(p.vx) || 1, 'arrow', p.x, p.y, { power: p.power, crit: Math.random() < (p.power ? 0.3 : 0.08) });
+          const res = damageEnemy(e, p.dmg, Math.sign(p.vx) || 1, 'arrow', p.x, p.y, { power: p.power, crit: Math.random() < (p.power ? 0.3 : 0.08) }); if (res !== 'blocked' && res !== false) tally('arrows');
           if (res === 'blocked') { p.dead = true; G.projs.push({ kind: 'harrow', x: p.x, y: p.y, vx: -p.vx * 0.2, vy: -200, grav: 900, life: 0.6, dmg: 0, spent: true }); break; }
           if (p.power && p.pierce > 0 && res) { p.pierce--; p.hits.push(e); continue; }
           if (res) { p.dead = true; break; }
@@ -3177,7 +3227,7 @@ function updatePet(dt) {
 function canDrink(h) { return !!G && !h.dead && (save.potions || 0) > 0 && h.hp < h.maxHp; }
 function drinkPotion(h) {
   if (!canDrink(h)) { sfx('ui'); return; }
-  save.potions--; persist();
+  save.potions--; persist(); G.potUsed = true;
   h.hp = Math.min(h.maxHp, h.hp + SHOP.potion.heal); sfx('heart'); floatText(h.x, h.y - 56, '+2 hearts', '#b8e08a');
   for (let i = 0; i < 16; i++) part({ kind: 'star', x: h.x + rand(-13, 13), y: h.y - rand(4, 46), vx: rand(-22, 22), vy: rand(-80, -25), life: rand(0.5, 1.1), size: pick([2, 3]), color: pick(['#b8e08a', '#e8d27a', '#d8f0b0', '#f2dc96']) });
   if (h.hp > h.maxHp * 0.6) G.said.struggle = false;
@@ -3199,6 +3249,7 @@ function heroPose(h) {
     P.bob = Math.abs(Math.sin(ph)) > 0.75 ? -1 : 0; P.lean = sp > 0.6 ? 1 : 0;
   } else P.bob = Math.sin(T * 2.2) > 0.6 ? 1 : 0;
   if (h.landT > 0) P.crouch = 0.6;
+  if (h.roll) { P.crouch = 1.5; P.feet = [4, -6, -2, -5]; P.rot = (h.roll.t / ROLL_T) * Math.PI * 2; P.pivot = -18; P.cape = 1.3; P.arm = 1.3; P.wpn = 0.6; P.reach = 0.7; P.lean = 0; P.bob = 0; return P; }
   if (h.petting) { P.crouch = 1.5; P.feet = [6, 0, -7, 0]; P.weapon = 'none'; P.arm = 1.05 + Math.sin(T * 9) * 0.22; P.reach = 0.95; P.cape = 0.2; return P; }
   if (h.dead) { P.rot = -Math.min(1.45, h.deadT * 5); P.weapon = h.weapon === 'sword' ? 'sword' : 'none'; P.arm = 0.6; return P; }
   if (h.hurtT > 0) { P.lean = -2; P.arm = -0.5; P.wpn = -1.2; P.crouch = 0.2; }
@@ -3258,7 +3309,7 @@ function dkPose(e) {
 function drawHeroEnt(c) {
   const h = G.hero, P = heroPose(h), sw = SWORDS[G.L.sword];
   shadowAt(c, h.x, 10);
-  if (h.inv > 0 && !h.dead && ((h.inv * 14) | 0) % 2) c.globalAlpha = 0.45;
+  if (h.inv > 0 && !h.dead && !h.roll && ((h.inv * 14) | 0) % 2) c.globalAlpha = 0.45;
   drawKnight(c, h.x, h.y, h.face, P, sw);
   c.globalAlpha = 1;
   if (sw.glow && P.weapon === 'sword') {
@@ -3348,6 +3399,37 @@ function say(key, vars) {
   Msg.push(text, who === 'boss' ? G.L.boss : who, who === 'boss' ? G.L.bossName : SPEAKER_NAME[who]);
 }
 
+/* ---------- weather: drizzle and mist in the woods (it clears after wave 1), a windy dusk with leaves and chaff in the
+   village (distant thunder near the boss), night snow at the keep that thickens for the dragon, with rare lightning ---------- */
+function drawWeather(c, dt) {
+  const th = G.L.theme, boss = !!(G.boss && !G.boss.gone), W = G.wx || (G.wx = { p: [], amt: th === 'keep' ? 0.45 : 1, cam: G.camX, flash: 0, next: rand(5, 9) });
+  const kind = th === 'forest' ? 0 : th === 'keep' ? 2 : 1;
+  const want = kind === 0 ? (G.waveIdx > 0 || (G.waveIdx === 0 && G.phase !== 'wave') ? 0 : 1) : kind === 2 ? (boss ? 1 : 0.45) : 1;
+  W.amt = approach(W.amt, want, dt * 0.22);
+  const dx = (G.camX - W.cam) * ZOOM, max = Math.round([70, 40, 120][kind] * W.amt); W.cam = G.camX;
+  while (W.p.length < max) W.p.push({ x: rand(-20, VW + 20), y: rand(-H, H), s: rand(0.6, 1.4), ph: rand(0, 6), leaf: Math.random() < 0.45 });
+  if (W.p.length > max) W.p.length = max;
+  for (const p of W.p) {
+    if (kind === 0) { p.x += -40 * dt - dx; p.y += 470 * p.s * dt; c.fillStyle = 'rgba(200,210,218,.42)'; c.fillRect(p.x, p.y, 1.2, 6 * p.s); }
+    else if (kind === 1) {
+      p.x += (90 + 50 * p.s) * dt - dx; p.y += (18 + Math.sin(T * 3 + p.ph) * 22) * p.s * dt;
+      c.fillStyle = p.leaf ? ['#a9532c', '#c4893c', '#8a6a3a'][(p.ph | 0) % 3] : 'rgba(232,214,160,.7)';
+      c.fillRect(p.x, p.y, p.leaf ? 2.7 : 1.35, p.leaf && Math.sin(T * 6 + p.ph) < 0 ? 2.7 : 1.35);
+    } else { p.x += (Math.sin(T * 1.3 + p.ph) * 14 - 8) * dt - dx; p.y += (20 + 26 * W.amt) * p.s * dt; c.fillStyle = 'rgba(242,246,250,.85)'; c.fillRect(p.x, p.y, p.s > 1.1 ? 2.7 : 1.35, p.s > 1.1 ? 2.7 : 1.35); }
+    if (p.y > H + 8) { p.y = rand(-30, -6); p.x = rand(-20, VW + 20); }
+    if (p.x > VW + 24) p.x -= VW + 44; else if (p.x < -24) p.x += VW + 44;
+  }
+  if (kind === 0 && W.amt > 0.01) {
+    const gr = c.createLinearGradient(0, H * 0.35, 0, H); gr.addColorStop(0, 'rgba(206,214,214,0)'); gr.addColorStop(1, 'rgba(206,214,214,' + (0.3 * W.amt).toFixed(3) + ')');
+    c.fillStyle = gr; c.fillRect(0, H * 0.35, VW, H * 0.65);
+  }
+  if ((kind === 1 && boss) || kind === 2) {
+    W.next -= dt;
+    if (W.next <= 0) { W.next = kind === 1 ? rand(7, 12) : rand(boss ? 8 : 13, boss ? 15 : 24); W.flash = kind === 1 ? 0.1 : 0.42; sfx('thunder', kind === 1 ? 0.5 : 0.8); }
+  }
+  if (W.flash > 0) { c.fillStyle = 'rgba(232,238,248,' + (W.flash * (0.6 + 0.4 * Math.sin(T * 60))).toFixed(3) + ')'; c.fillRect(0, 0, VW, H); W.flash = Math.max(0, W.flash - dt * 1.6); }
+}
+
 /* =====================================================================
    BOSSES & LEVEL FLOW — waves, boss intros (ogre stomps in, dark knight
    appears in smoke, dragon hatches from an egg), victory with the cat
@@ -3425,7 +3507,7 @@ function bossBanner(b, t0) { G.banner = { text: b.name, sub: 'Boss', t: t0 || 0 
 function bossReady(b) { b.invuln = false; b.showHud = true; G.phase = 'boss'; G.phaseT = 0; }
 
 /* ---------- checkpoints: the start of every wave and of the boss intro (kept until the level is won or started over) ---------- */
-function setCheckpoint(boss) { checkpoint = { li: G.li, wave: G.waveIdx, boss, coins: G.coins, time: G.time, arrows: G.hero.arrows }; }
+function setCheckpoint(boss) { checkpoint = { li: G.li, wave: G.waveIdx, boss, coins: G.coins, time: G.time, arrows: G.hero.arrows, pot: G.potUsed }; }
 /* continuing at the boss checkpoint skips the entrance: the boss already stands (or flies) in the arena */
 function placeBoss() {
   const h = G.hero, b = makeBoss(G.L.boss); G.boss = b; G.enemies.push(b);
@@ -3688,6 +3770,9 @@ function finishLevel(win) {
     const hpOk = h.hp >= h.maxHp * 0.5, parOk = G.time <= L.par, stars = 1 + (hpOk ? 1 : 0) + (parOk ? 1 : 0);
     save.stars[i] = Math.max(save.stars[i] || 0, stars); save.coins += G.coins;
     if (i + 1 < LEVELS.length) save.unlocked = Math.max(save.unlocked, i + 2);
+    if (!deathCount[i] && (G.lowHp == null || G.lowHp > h.maxHp - HEART_HP)) award('untouch');
+    if (i === LEVELS.length - 1) { award('hero'); if (!G.potUsed) award('nopot'); }
+    if (save.coins >= 300) award('rich');
     persist(); deathCount[i] = 0; checkpoint = null;
     showResult({ win: true, level: i, stars, hpOk, parOk, coins: G.coins, time: G.time });
   } else { deathCount[i]++; showResult({ win: false, level: i, deaths: deathCount[i] }); }
@@ -3699,7 +3784,7 @@ function finishLevel(win) {
    ===================================================================== */
 const Input = (() => {
   const keys = {}, joy = { id: null, bx: 0, by: 0, dx: 0, dy: 0 }, hitB = { id: null, sx: 0, sy: 0, x: 0, y: 0 }, swapB = { id: null };
-  let hitEdge = false, swapEdge = false, kHitPrev = false, kSwapPrev = false, relAim = null, potEdge = false, kPotPrev = false;
+  let hitEdge = false, swapEdge = false, kHitPrev = false, kSwapPrev = false, relAim = null, potEdge = false, kPotPrev = false, rollEdge = 0, kRollPrev = 0;
   const JR = 50, HR = 38, SR = 25;
   const home = () => ({ x: safe.l + 30 + JR, y: H - 26 - JR });
   const hitPos = () => ({ x: VW - safe.r - 28 - HR, y: H - 26 - HR });
@@ -3715,24 +3800,28 @@ const Input = (() => {
     if (Math.hypot(p.x - pp.x, p.y - pp.y) < 24) { pauseGame(); return; }
     if (Math.hypot(p.x - sp.x, p.y - sp.y) < SR * 1.5) { swapB.id = e.pointerId; swapEdge = true; capture(e); return; }
     const pt = potPos(); if (Math.hypot(p.x - pt.x, p.y - pt.y) < SR * 1.3) { potEdge = true; return; }
-    if (p.x > VW * 0.5) { if (hitB.id === null) { hitB.id = e.pointerId; hitB.sx = hitB.x = p.x; hitB.sy = hitB.y = p.y; hitEdge = true; capture(e); } return; }
-    if (joy.id === null) { joy.id = e.pointerId; joy.bx = clamp(p.x, safe.l + JR + 6, VW * 0.5 - JR); joy.by = clamp(p.y, H * 0.35, H - JR - 6); joy.dx = joy.dy = 0; capture(e); }
+    if (p.x > VW * 0.5) { if (hitB.id === null) { hitB.id = e.pointerId; const c0 = hitPos(); hitB.cx = c0.x; hitB.cy = c0.y; hitB.sx = hitB.x = p.x; hitB.sy = hitB.y = p.y; hitEdge = true; capture(e); } return; }
+    if (joy.id === null) { const hm = home(); joy.id = e.pointerId; joy.bx = hm.x; joy.by = hm.y; joy.armed = false; capture(e); joyAt(p); }
   }
   function move(e) {
     if (e.pointerId === hitB.id) { e.preventDefault(); const p = toV(e); hitB.x = p.x; hitB.y = p.y; return; }
     if (e.pointerId !== joy.id) return;
-    e.preventDefault();
-    const p = toV(e); let dx = (p.x - joy.bx) / JR, dy = (p.y - joy.by) / JR; const m = Math.hypot(dx, dy);
-    if (m > 1.6) { joy.bx += (dx / m) * (m - 1.6) * JR; joy.by += (dy / m) * (m - 1.6) * JR; dx = (p.x - joy.bx) / JR; dy = (p.y - joy.by) / JR; }
-    const m2 = Math.hypot(dx, dy); if (m2 > 1) { dx /= m2; dy /= m2; }
+    e.preventDefault(); joyAt(toV(e));
+  }
+  function joyAt(p) {   // fixed base at home: the knob follows the finger relative to it, clamped to the ring
+    let dx = (p.x - joy.bx) / JR, dy = (p.y - joy.by) / JR; const m = Math.hypot(dx, dy); if (m > 1) { dx /= m; dy /= m; }
     joy.dx = dx; joy.dy = dy;
+    /* dodge roll: a flick from near the center to past 0.85 within ~120 ms, or two quick flicks the same way */
+    const now = performance.now(), ad = Math.abs(dx), s = Math.sign(dx);
+    if (ad < 0.3) { joy.ct = now; joy.armed = true; }
+    else if (ad > 0.85 && joy.armed && Math.abs(dy) < 0.6) { joy.armed = false; if (now - joy.ct < 120 || (now - (joy.lf || -1e9) < 350 && joy.ls === s)) rollEdge = s; joy.lf = now; joy.ls = s; }
   }
   function up(e) {
     if (e.pointerId === joy.id) { joy.id = null; joy.dx = joy.dy = 0; }
-    if (e.pointerId === hitB.id) { if (e.type === 'pointerup') { const p = toV(e); hitB.x = p.x; hitB.y = p.y; } relAim = { dx: hitB.x - hitB.sx, dy: hitB.y - hitB.sy }; hitB.id = null; }
+    if (e.pointerId === hitB.id) { if (e.type === 'pointerup') { const p = toV(e); hitB.x = p.x; hitB.y = p.y; } relAim = { dx: hitB.x - hitB.cx, dy: hitB.y - hitB.cy }; hitB.id = null; }
     if (e.pointerId === swapB.id) swapB.id = null;
   }
-  const CODES = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'KeyA', 'KeyD', 'KeyW', 'KeyS', 'KeyJ', 'KeyK', 'KeyX', 'KeyC', 'KeyQ', 'KeyH'];
+  const CODES = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'KeyA', 'KeyD', 'KeyW', 'KeyS', 'KeyJ', 'KeyK', 'KeyX', 'KeyC', 'KeyQ', 'KeyH', 'KeyL', 'ShiftLeft', 'ShiftRight'];
   function key(e, v) {
     if (v && (e.code === 'Escape' || e.code === 'KeyP')) { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); return; }
     if (!CODES.includes(e.code)) return;
@@ -3745,13 +3834,14 @@ const Input = (() => {
     const ky = (keys.ArrowDown || keys.KeyS ? 1 : 0) - (keys.ArrowUp || keys.KeyW ? 1 : 0);
     if (kx) x = kx; if (ky) y = ky;
     const kHit = !!(keys.KeyJ || keys.Space || keys.KeyX), kSwap = !!(keys.KeyK || keys.KeyQ || keys.KeyC);
-    const aim = hitB.id !== null ? { dx: hitB.x - hitB.sx, dy: hitB.y - hitB.sy } : relAim;
-    const kPot = !!keys.KeyH;
-    const r = { x, y, hit: hitEdge || (kHit && !kHitPrev), hitHeld: hitB.id !== null || kHit, swap: swapEdge || (kSwap && !kSwapPrev), aim, potion: potEdge || (kPot && !kPotPrev) };
-    kHitPrev = kHit; kSwapPrev = kSwap; kPotPrev = kPot; hitEdge = swapEdge = potEdge = false; relAim = null;
+    const aim = hitB.id !== null ? { dx: hitB.x - hitB.cx, dy: hitB.y - hitB.cy } : relAim;   // bow aim: from the fight button's center (taken at touch time; VW differs during the update)
+    const kPot = !!keys.KeyH, kRoll = (keys.ShiftLeft || keys.ShiftRight || keys.KeyL) && kx ? kx : 0;
+    const r = { x, y, hit: hitEdge || (kHit && !kHitPrev), hitHeld: hitB.id !== null || kHit, swap: swapEdge || (kSwap && !kSwapPrev), aim, potion: potEdge || (kPot && !kPotPrev),
+      roll: rollEdge || (kRoll && kRoll !== kRollPrev ? kRoll : 0), kHeld: kHit, kAim: kHit && (kx || ky) ? { dx: kx * 40, dy: ky * 40 } : null };
+    kHitPrev = kHit; kSwapPrev = kSwap; kPotPrev = kPot; kRollPrev = kRoll; hitEdge = swapEdge = potEdge = false; rollEdge = 0; relAim = null;
     return r;
   }
-  function reset() { for (const k in keys) keys[k] = false; joy.id = hitB.id = swapB.id = null; joy.dx = joy.dy = 0; hitEdge = swapEdge = potEdge = false; relAim = null; }
+  function reset() { for (const k in keys) keys[k] = false; joy.id = hitB.id = swapB.id = null; joy.dx = joy.dy = 0; hitEdge = swapEdge = potEdge = false; rollEdge = 0; relAim = null; }
   function bind() {
     cvs.addEventListener('pointerdown', down, { passive: false });
     cvs.addEventListener('pointermove', move, { passive: false });
@@ -3924,7 +4014,7 @@ function drawControls(c) {
   ring(c, pp.x, pp.y, 13, 'rgba(22,16,12,.78)', '#8f7240'); c.fillStyle = '#e6d6b0'; c.fillRect(pp.x - 4.5, pp.y - 5.5, 3, 11); c.fillRect(pp.x + 1.5, pp.y - 5.5, 3, 11);
   if (!touchMode) {
     c.font = '600 10px "Pixelify Sans", monospace'; c.textAlign = 'center'; c.textBaseline = 'alphabetic'; c.fillStyle = 'rgba(236,224,196,.7)';
-    c.fillText('Move: arrows / WASD   Jump: up   Shield: down   Strike: J or Space (hold to draw the bow)   Swap: K   Potion: H   Pause: P', VW / 2, H - 8);
+    c.fillText('Move: arrows / WASD   Jump: up   Shield: down   Roll: Shift + move   Strike: J (bow: hold, aim with arrows)   Swap: K   Potion: H   Pause: P', VW / 2, H - 8);
     return;
   }
   const j = Input.joy, hm = Input.home(), R = Input.JR, bx = j.id !== null ? j.bx : hm.x, by = j.id !== null ? j.by : hm.y;
@@ -3940,14 +4030,12 @@ function drawControls(c) {
   if (B) {
     const full = B.pow >= 0.97;
     c.strokeStyle = full ? 'rgba(200,236,255,.95)' : 'rgba(217,180,106,.9)'; c.lineWidth = 3; c.lineCap = 'round';
-    c.beginPath(); c.arc(hp.x, hp.y, hr + 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.02, B.pow)); c.stroke();
-    const hb = Input.hitB;
-    if (held && B.manual) {
-      const dx = hb.x - hb.sx, dy = hb.y - hb.sy, n = Math.max(1, Math.floor(Math.hypot(dx, dy) / 7));
-      c.fillStyle = 'rgba(236,224,196,.8)'; for (let i = 1; i <= n; i++) circ(c, hb.sx + (dx * i) / n, hb.sy + (dy * i) / n, 1.6);
-      c.strokeStyle = 'rgba(236,224,196,.75)'; c.lineWidth = 1.5; c.beginPath(); c.arc(hb.sx, hb.sy, 7, 0, Math.PI * 2); c.stroke();
-      c.fillStyle = full ? 'rgba(200,236,255,.9)' : 'rgba(236,214,160,.9)'; circ(c, hb.x, hb.y, 5);
-    }
+    c.beginPath(); c.arc(hp.x, hp.y, (held && hero.weapon === 'bow' ? Input.JR : hr) + 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.02, B.pow)); c.stroke();
+  }
+  if (held && hero.weapon === 'bow') {   // the bow aim stick: a ring and a knob fixed on the fight button
+    const hb = Input.hitB, R = Input.JR; let dx = (hb.x - hp.x) / R, dy = (hb.y - hp.y) / R; const m = Math.hypot(dx, dy); if (m > 1) { dx /= m; dy /= m; }
+    ring(c, hp.x, hp.y, R, 'rgba(18,12,8,.16)', 'rgba(222,204,160,.5)');
+    ring(c, hp.x + dx * R * 0.62, hp.y + dy * R * 0.62, 17, B && B.pow >= 0.97 ? 'rgba(200,236,255,.45)' : 'rgba(236,224,196,.32)', 'rgba(250,240,214,.75)');
   }
   const sp = Input.swapPos(), sh = Input.swapHeld();
   ring(c, sp.x, sp.y, Input.SR, sh ? 'rgba(236,214,160,.3)' : 'rgba(18,12,8,.24)', 'rgba(222,204,160,.65)');
@@ -3986,10 +4074,11 @@ function buildLevels() {
     b.innerHTML = '<span class="banner"><span class="num">' + (i + 1) + '</span><span class="scene sc-' + L.theme + '"' + (thumb ? ' style="background-image:url(' + thumb + ')"' : '') + '></span><span class="lname">' + L.name +
       '</span><span class="diff">' + L.diff + '</span><span class="stars">' + [0, 1, 2].map((k) => '<i class="' + (k < st ? 'on' : '') + '"></i>').join('') +
       '</span></span>' + (locked ? '<span class="lock" aria-hidden="true"></span>' : '');
-    b.addEventListener('click', () => { sfx('ui'); cloudTransition(() => startLevel(i), { quick: true }); });
+    b.addEventListener('click', () => { sfx('ui'); cloudTransition(() => (i === 0 && !save.introSeen ? startStory() : startLevel(i)), { quick: true }); });
     box.appendChild(b);
   });
   $('coin-total').textContent = save.coins;
+  if (save.coins >= 300) award('rich');
 }
 /* ---------- the coin shop: potions, armor, capes and Kitty's gear ---------- */
 const SHOPV = { buf: null, thumbs: {} };
@@ -4050,6 +4139,83 @@ function shopAct(act) {
   }
   save.look[kind] = id; persist(); applyLooks();
   sfx(kind === 'kitty' ? 'love' : 'ui', 1); buildShop(note);
+}
+/* ---------- trophies: medieval badges, with a parchment toast when one is earned ---------- */
+const toastQ = []; let toastOn = false, tallyDirty = false;
+function award(id) {
+  if (save.trophies.includes(id)) return;
+  const t = TROPHIES.find((o) => o.id === id); if (!t) return;
+  save.trophies.push(id); persist(); toastQ.push(t); if (!toastOn) nextToast();
+}
+function nextToast() {
+  const el = $('toast'), t = toastQ.shift(); if (!t) { el.hidden = true; toastOn = false; return; }
+  toastOn = true; $('toast-medal').textContent = t.name[0]; $('toast-name').textContent = t.name; el.hidden = false;
+  el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+  sfx('love', 3); setTimeout(nextToast, 2600);
+}
+function tally(stat) {
+  save.tally[stat] = (save.tally[stat] || 0) + 1;
+  for (const t of TROPHIES) if (t.stat === stat && save.tally[stat] >= t.goal) award(t.id);
+  if (!tallyDirty) { tallyDirty = true; setTimeout(() => { tallyDirty = false; persist(); }, 1500); }   // save the counters in batches
+}
+function buildTrophies() {
+  $('troph-count').textContent = save.trophies.length + ' of ' + TROPHIES.length + ' earned';
+  $('troph-items').innerHTML = '<div class="troph-grid">' + TROPHIES.map((t) => {
+    const on = save.trophies.includes(t.id), v = t.stat ? Math.min(t.goal, t.stat === 'coins' ? save.coins : save.tally[t.stat] || 0) : 0;
+    return '<div class="troph' + (on ? '' : ' off') + '"><span class="medal' + (on ? '' : ' off') + '" aria-hidden="true">' + t.name[0] + '</span><span><b>' + t.name + '</b><small>' +
+      t.desc + (on ? ' Earned!' : t.stat ? ' (' + v + '/' + t.goal + ')' : '') + '</small></span></div>';
+  }).join('') + '</div>';
+}
+function openTrophies() { sfx('ui'); state = 'trophies'; buildTrophies(); showScreen('scr-troph'); $('troph-items').scrollTop = 0; }
+
+/* ---------- story intro: four quick pictures before level 1, shown once (tap to skip) ---------- */
+const Story = { t: 0, done: true, bufs: null }, STORY_CAPS = ['Dawn', 'Hungry...', 'A friend', 'Together'], STORY_D = 1.05, STORY_F = 0.25;
+function startStory() { state = 'story'; Story.t = 0; Story.done = false; showScreen(null); }
+function endStory() { if (Story.done) return; Story.done = true; save.introSeen = true; persist(); cloudTransition(() => startLevel(0), { quick: true }); }
+function storyPic(g, n, t) {   // 160x90 pixel pictures in the game's own art
+  const GY = 80, bands = (cols) => cols.forEach((col, i) => { g.fillStyle = col; g.fillRect(0, Math.floor((i * GY) / cols.length), 160, Math.ceil(GY / cols.length) + 1); });
+  const ground = (a, b) => { g.fillStyle = a; g.fillRect(0, GY, 160, 10); g.fillStyle = b; g.fillRect(0, GY, 160, 1); };
+  const walk = (x, ph) => { shadowAt(g, x, 10, GY); drawKnight(g, x, GY, 1, { feet: [Math.sin(ph) * 4, -Math.max(0, Math.cos(ph)) * 3, -Math.sin(ph) * 4, -Math.max(0, -Math.cos(ph)) * 3], bob: Math.abs(Math.sin(ph)) > 0.8 ? -1 : 0, cape: 0.5, arm: 0.85, reach: 0.75, wpn: -1.1, weapon: 'sword', off: 'down' }, SWORDS[0]); };
+  const kneel = (x, f) => { shadowAt(g, x, 10, GY); drawKnight(g, x, GY, f, { crouch: 1.5, feet: [6, 0, -7, 0], weapon: 'none', arm: 1.45, reach: 0.8, cape: 0.1, lean: -1 }, SWORDS[0]); };
+  const stone = (x) => { spr(g, 0, 0, 1); oval(x, GY - 6, 15, 9, '#6e6b66'); oval(x - 2, GY - 9, 11, 6, '#83807a'); };
+  g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; spr(g, 0, 0, 1);
+  if (n === 0) {          // dawn: the knight steps out of his cave
+    bands(['#3c3b55', '#574e68', '#86687a', '#c0826c', '#e2a66e']); disc(126, GY - 2, 10, '#f6d48c');
+    poly([0, GY, 0, 26, 20, 16, 44, 22, 62, 46, 70, GY], '#5b5650'); poly([0, 26, 20, 16, 44, 22, 30, 30, 8, 34], '#77716a'); oval(30, GY - 13, 13, 17, '#1b1715');
+    ground('#4e4032', '#6c7a4c'); walk(48 + t * 8, t * 8);
+  } else if (n === 1) {   // grey rain: hungry, nothing to eat
+    bands(['#4f565f', '#5b626a', '#677077', '#747b81']); poly([0, GY, 0, 62, 44, 54, 96, 60, 136, 52, 160, 58, 160, GY], '#555c58');
+    ground('#3e3a32', '#4d5a40'); stone(98); kneel(82, -1);
+    spr(g, 0, 0, 1); disc(66, 38, 1.5, '#e6e1d4'); disc(60, 31, 2.5, '#e6e1d4'); oval(47, 20, 11, 7, '#e6e1d4'); oval(46, 20, 4, 2.5, '#a5533a'); line(49, 20, 52, 18, '#f6f0e4'); dot(52, 17, '#f6f0e4');
+    g.fillStyle = 'rgba(196,206,214,.6)'; for (let i = 0; i < 50; i++) g.fillRect((((hash(i) * 180 - t * 25) % 180) + 180) % 180 - 10 | 0, ((hash(i + 70) * 100 + t * 160) % 100) - 8 | 0, 1, 4);
+  } else if (n === 2) {   // the clouds part: Kitty brings him meat
+    bands(['#5d646c', '#737880', '#9a988c', '#c4b38e']);
+    g.globalAlpha = 0.3; poly([84, 0, 112, 0, 128, GY, 70, GY], '#f6e6b4'); g.globalAlpha = 1;
+    poly([0, 0, 64, 0, 56, 8, 30, 13, 0, 10], '#4f565f'); poly([120, 0, 160, 0, 160, 13, 138, 10, 126, 6], '#4f565f');
+    ground('#4a4434', '#5d6a44'); stone(52); kneel(70, 1);
+    const run = t < 0.4, cx = run ? 112 - t * 30 : 100;
+    drawCat(g, { x: cx, y: GY, face: -1, state: run ? 'run' : 'sit', anim: t * 0.6, t: 0 });
+    spr(g, cx, GY, -1); const mx = run ? 15 : 9.5, my = run ? -10 : -12;
+    oval(mx, my, 2.5, 1.8, '#a5533a'); dot(mx - 1, my - 1, '#c46a4a'); line(mx + 1.5, my, mx + 3.5, my - 1, '#ece4d0'); dot(mx + 3.5, my - 2, '#ece4d0'); dot(mx + 4.5, my - 1, '#ece4d0');
+  } else {                // sunrise: off down the road together
+    bands(['#6f6486', '#b4807a', '#e2a772', '#f2cd8e', '#f7e3ae']); disc(100, GY - 6, 12, '#fdeab4');
+    poly([0, GY, 0, 66, 54, 58, 110, 66, 160, 60, 160, GY], '#6e6a50');
+    ground('#5d5038', '#7a8a52'); g.fillStyle = '#a08a66'; g.fillRect(0, GY + 2, 160, 5);
+    walk(40 + t * 14, t * 9); drawCat(g, { x: 68 + t * 14, y: GY, face: 1, state: 'run', anim: t * 0.5, t: 0 });
+  }
+}
+function renderStory(c, dt) {
+  Story.t += dt; const t = Story.t;
+  if (t > 4 * STORY_D && !Story.done) endStory();
+  if (!Story.bufs) Story.bufs = [mkCanvas(160, 90), mkCanvas(160, 90)];
+  const i = Math.min(3, Math.floor(t / STORY_D)), k = t - i * STORY_D, s = Math.max(1, Math.min(VW / 160, H / 90) | 0), w = 160 * s, h = 90 * s, x0 = Math.round((VW - w) / 2), y0 = Math.round((H - h) / 2);
+  c.fillStyle = '#15181d'; c.fillRect(0, 0, VW, H); c.imageSmoothingEnabled = false;
+  const pic = (n, a, b, tt) => { storyPic(b.getContext('2d'), n, Math.max(0, tt)); c.globalAlpha = a; c.drawImage(b, x0, y0, w, h); };
+  pic(i, 1, Story.bufs[0], k);
+  if (i < 3 && k > STORY_D - STORY_F) pic(i + 1, (k - STORY_D + STORY_F) / STORY_F, Story.bufs[1], 0);
+  c.globalAlpha = 1; c.strokeStyle = '#8f7240'; c.lineWidth = 3; c.strokeRect(x0 + 1.5, y0 + 1.5, w - 3, h - 3);
+  outlined(c, STORY_CAPS[i], VW / 2, y0 + h - 24, '#f0e2c2', 'center', 20);
+  outlined(c, 'Tap to skip', x0 + w - 44, y0 + 14, 'rgba(236,224,196,.75)', 'center', 10);
 }
 function openShop() { sfx('ui'); state = 'shop'; buildShop(''); showScreen('scr-shop'); $('shop-items').scrollTop = 0; }
 function closeShop() { sfx('ui'); state = 'levels'; buildLevels(); showScreen('scr-levels'); }
@@ -4225,7 +4391,8 @@ function frame(now) {
 function drawFrame(dt, report) {
   try {
     c.setTransform(DPR * SCALE, 0, 0, DPR * SCALE, 0, 0); c.globalAlpha = 1;
-    if (G && (state === 'play' || state === 'paused' || state === 'result')) { renderGame(c); drawHUD(c); Msg.draw(c); drawBanner(c); if (state === 'play') drawControls(c); }
+    if (state === 'story') renderStory(c, dt);
+    else if (G && (state === 'play' || state === 'paused' || state === 'result')) { renderGame(c); drawWeather(c, state === 'play' ? dt : 0); drawHUD(c); Msg.draw(c); drawBanner(c); if (state === 'play') drawControls(c); }
     else { renderTitle(c, dt); if (state === 'shop') drawShopPreview(); }
   } catch (err) { report(err); }
   try { renderFx(dt); } catch (err) { report(err); }
@@ -4260,6 +4427,10 @@ function boot() {
   $('btn-back').addEventListener('click', () => { sfx('ui'); cloudTransition(() => { state = 'title'; showScreen('scr-title'); }, { quick: true }); });
   $('btn-shop').addEventListener('click', openShop);
   $('shop-back').addEventListener('click', closeShop);
+  $('btn-troph').addEventListener('click', openTrophies);
+  $('troph-back').addEventListener('click', closeShop);
+  cvs.addEventListener('pointerdown', () => { if (state === 'story' && Story.t > 0.25) endStory(); });
+  window.addEventListener('keydown', () => { if (state === 'story' && Story.t > 0.25) endStory(); });
   $('shop-items').addEventListener('click', (e) => { const b = e.target.closest('[data-act]'); if (b && !b.disabled) shopAct(b.dataset.act); });
   $('btn-resume').addEventListener('click', () => { sfx('ui'); resumeGame(); });
   $('btn-restart').addEventListener('click', () => { sfx('ui'); const i = G ? G.li : 0; cloudTransition(() => startLevel(i), { quick: true }); });
@@ -4270,7 +4441,7 @@ function boot() {
   showScreen('scr-title');
   requestAnimationFrame(frame);
   ['forest', 'village', 'keep'].forEach((n, i) => setTimeout(() => { try { buildTheme(n); } catch (e) { console.error(e); } }, 600 + i * 350));   // paint the lands while the title shows
-  if (window.KP_TEST || /test/.test(location.hash)) window.KP = { startLevel, startBoss, startWave, get G() { return G; }, get state() { return state; }, save, Snd, Input, tick: testTick, openShop, shopAct, drinkPotion: () => G && drinkPotion(G.hero) };
+  if (window.KP_TEST || /test/.test(location.hash)) window.KP = { startLevel, startBoss, startWave, get G() { return G; }, get state() { return state; }, save, Snd, Input, tick: testTick, openShop, shopAct, drinkPotion: () => G && drinkPotion(G.hero), openTrophies, award, startStory, Story };
 }
 boot();
 
