@@ -276,30 +276,31 @@ i.coin { display: inline-block; width: .9em; height: .9em; border-radius: 50%; b
 /* ---------- MESSAGES: change any text you like ----------
    Placeholders: {n} level number, {name} level name, {w} wave, {total} waves,
                  {boss} boss name, {arrows} arrows left, {sword} new sword name
-   Put several texts in one list and the game picks one at random.        */
+   Put several texts in one list and the game picks one at random.
+   An empty list [] means nothing is said at that moment.                 */
 const MESSAGES = {
-  levelStart:    ["{name}. The road goes on.", "{name}... something is watching me."],
-  tutorial:      ["Left stick to move. Up to jump, down to raise my shield."],
-  waveStart:     ["Wave {w} of {total}. Here they come."],
-  waveClear:     ["That's the last of them... for now."],
-  bossAppear:    ["You dare walk into my land, little knight?"],
-  dragonEgg:     ["An egg... that big? This can't be good."],
-  bossHalf:      ["It's weakening. Keep pushing!"],
-  struggle:      ["I'm hurt... raise the shield.", "Careful... I can't take many more hits."],
-  lowArrows:     ["Only {arrows} arrows left..."],
-  noArrows:      ["Out of arrows. Sword it is."],
-  catHello:      ["Mrrp! Come back safe."],
-  catReturns:    ["Kitty! You waited for me."],
-  catBye:        ["Purrr... my hero."],
+  levelStart:    ["{name}."],
+  tutorial:      ["Stick to move. Up to jump. Down to block."],
+  waveStart:     [],
+  waveClear:     [],
+  bossAppear:    [],
+  dragonEgg:     ["An egg...?"],
+  bossHalf:      [],
+  struggle:      ["Careful..."],
+  lowArrows:     [],
+  noArrows:      ["No arrows left."],
+  catHello:      ["Mrrp!"],
+  catReturns:    ["Kitty!"],
+  catBye:        ["Purrr..."],
   defeat:        ["I fell... but I'll rise again."],
   defeatAgain:   ["Block with the shield, then strike when they miss."],
-  checkpoint:    ["Wave {w} again. This time I won't fall."],
-  checkpointBoss: ["{boss}. Round two."],
+  checkpoint:    [],
+  checkpointBoss: [],
   levelComplete: ["The path is clear. On to the next land."],
   swordUpgrade:  ["My sword is now {sword}!"],
   gameComplete:  ["The dragon is gone. Time to rest... with Kitty."],
-  bowTip:        ["My bow: hold the strike button and drag to aim. Let go to shoot."],
-  bowTipKeys:    ["My bow: hold J and aim with the arrows. Let go to shoot."]
+  bowTip:        ["Drag the button to aim. Let go to shoot."],
+  bowTipKeys:    ["Hold J and aim with the arrow keys. Let go to shoot."]
 };
 /* who says each message: 'knight' (default), 'cat' or 'boss' */
 const SPEAKER_OF = { bossAppear: 'boss', catHello: 'cat', catBye: 'cat' };
