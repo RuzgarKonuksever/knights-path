@@ -201,6 +201,7 @@ i.coin { display: inline-block; width: .9em; height: .9em; border-radius: 50%; b
     <span class="purse" aria-label="Coins"><i class="coin"></i><span id="coin-total">0</span></span>
     <button id="btn-shop" class="btn brass small" type="button">Shop</button>
     <button id="btn-troph" class="btn brass small" type="button">Trophies</button>
+    <button id="btn-story" class="btn brass small" type="button">Story</button>
     <button id="btn-begin" class="btn big small" type="button">Begin</button>
   </div>
 </section>
@@ -4230,10 +4231,16 @@ function buildTrophies() {
 }
 function openTrophies() { sfx('ui'); state = 'trophies'; buildTrophies(); showScreen('scr-troph'); $('troph-items').scrollTop = 0; }
 
-/* ---------- story intro: four quick pictures before level 1, shown once (tap to skip) ---------- */
-const Story = { t: 0, done: true, bufs: null }, STORY_CAPS = ['Dawn', 'Hungry...', 'A friend', 'Together'], STORY_D = 1.05, STORY_F = 0.25;
-function startStory() { state = 'story'; Story.t = 0; Story.done = false; showScreen(null); }
-function endStory() { if (Story.done) return; Story.done = true; save.introSeen = true; persist(); cloudTransition(() => startLevel(0), { quick: true }); }
+/* ---------- story intro: four wordless pictures, about 2 s each with soft crossfades; shown once before level 1,
+   replayable from the map with the Story button (tap or any key skips) ---------- */
+const Story = { t: 0, done: true, bufs: null, replay: false }, STORY_D = 2, STORY_F = 0.6;   // seconds per picture, crossfade length
+function startStory(replay) { state = 'story'; Story.t = 0; Story.done = false; Story.replay = !!replay; showScreen(null); }
+function endStory() {
+  if (Story.done || (Trans.active && Trans.blocking)) return;   // not while the clouds still cover the screen: that transition would be refused and the story would hang
+  Story.done = true;
+  if (Story.replay) { cloudTransition(() => { state = 'levels'; buildLevels(); showScreen('scr-levels'); }, { quick: true }); return; }   // replay: back to the map, save untouched
+  save.introSeen = true; persist(); cloudTransition(() => startLevel(0), { quick: true });
+}
 function storyPic(g, n, t) {   // 160x90 pixel pictures in the game's own art
   const GY = 80, bands = (cols) => cols.forEach((col, i) => { g.fillStyle = col; g.fillRect(0, Math.floor((i * GY) / cols.length), 160, Math.ceil(GY / cols.length) + 1); });
   const ground = (a, b) => { g.fillStyle = a; g.fillRect(0, GY, 160, 10); g.fillStyle = b; g.fillRect(0, GY, 160, 1); };
@@ -4255,7 +4262,7 @@ function storyPic(g, n, t) {   // 160x90 pixel pictures in the game's own art
     g.globalAlpha = 0.3; poly([84, 0, 112, 0, 128, GY, 70, GY], '#f6e6b4'); g.globalAlpha = 1;
     poly([0, 0, 64, 0, 56, 8, 30, 13, 0, 10], '#4f565f'); poly([120, 0, 160, 0, 160, 13, 138, 10, 126, 6], '#4f565f');
     ground('#4a4434', '#5d6a44'); stone(52); kneel(70, 1);
-    const run = t < 0.4, cx = run ? 112 - t * 30 : 100;
+    const run = t < 1.2, cx = run ? 136 - t * 30 : 100;
     drawCat(g, { x: cx, y: GY, face: -1, state: run ? 'run' : 'sit', anim: t * 0.6, t: 0 });
     spr(g, cx, GY, -1); const mx = run ? 15 : 9.5, my = run ? -10 : -12;
     oval(mx, my, 2.5, 1.8, '#a5533a'); dot(mx - 1, my - 1, '#c46a4a'); line(mx + 1.5, my, mx + 3.5, my - 1, '#ece4d0'); dot(mx + 3.5, my - 2, '#ece4d0'); dot(mx + 4.5, my - 1, '#ece4d0');
@@ -4273,11 +4280,10 @@ function renderStory(c, dt) {
   const i = Math.min(3, Math.floor(t / STORY_D)), k = t - i * STORY_D, s = Math.max(1, Math.min(VW / 160, H / 90) | 0), w = 160 * s, h = 90 * s, x0 = Math.round((VW - w) / 2), y0 = Math.round((H - h) / 2);
   c.fillStyle = '#15181d'; c.fillRect(0, 0, VW, H); c.imageSmoothingEnabled = false;
   const pic = (n, a, b, tt) => { storyPic(b.getContext('2d'), n, Math.max(0, tt)); c.globalAlpha = a; c.drawImage(b, x0, y0, w, h); };
-  pic(i, 1, Story.bufs[0], k);
-  if (i < 3 && k > STORY_D - STORY_F) pic(i + 1, (k - STORY_D + STORY_F) / STORY_F, Story.bufs[1], 0);
+  pic(i, 1, Story.bufs[0], i ? k + STORY_F : k);   // a picture's clock starts when it begins fading in, so nothing freezes mid-fade
+  const f = (k - STORY_D + STORY_F) / STORY_F;
+  if (i < 3 && f > 0) pic(i + 1, f * f * (3 - 2 * f), Story.bufs[1], f * STORY_F);   // eased crossfade into the next picture
   c.globalAlpha = 1; c.strokeStyle = '#8f7240'; c.lineWidth = 3; c.strokeRect(x0 + 1.5, y0 + 1.5, w - 3, h - 3);
-  outlined(c, STORY_CAPS[i], VW / 2, y0 + h - 24, '#f0e2c2', 'center', 20);
-  outlined(c, 'Tap to skip', x0 + w - 44, y0 + 14, 'rgba(236,224,196,.75)', 'center', 10);
 }
 function openShop() { sfx('ui'); state = 'shop'; buildShop(''); showScreen('scr-shop'); $('shop-items').scrollTop = 0; }
 function closeShop() { sfx('ui'); state = 'levels'; buildLevels(); showScreen('scr-levels'); }
@@ -4490,6 +4496,7 @@ function boot() {
   $('btn-shop').addEventListener('click', openShop);
   $('shop-back').addEventListener('click', closeShop);
   $('btn-troph').addEventListener('click', openTrophies);
+  $('btn-story').addEventListener('click', () => { if (!Trans.active) { sfx('ui'); cloudTransition(() => startStory(true), { quick: true }); } });
   $('btn-begin').addEventListener('click', () => { if (!Trans.active) beginLevel(MapS.sel); });
   $('map').addEventListener('click', (e) => {   // pick the land nearest to the tap
     const r = e.currentTarget.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * MAPW, y = ((e.clientY - r.top) / r.height) * MAPH;
