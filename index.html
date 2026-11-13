@@ -124,6 +124,8 @@ i.coin { display: inline-block; width: .9em; height: .9em; border-radius: 50%; b
 .goals span.ok::before { background: #5d6a44; border-color: #3d4630; }
 .stats { display: flex; gap: 18px; font-weight: 700; font-size: clamp(13px, 4vh, 18px); font-variant-numeric: tabular-nums; }
 .stats:empty { display: none; }
+.combo-line { font-size: clamp(11px, 3.2vh, 14px); color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.combo-line:empty { display: none; }
 
 /* coin shop: a merchant's parchment list beside a framed view of the knight and Kitty */
 .btn.brass { background: linear-gradient(#d2b066, #8f6f34); color: #2a1d10; border-color: #21170f; text-shadow: 0 1px 0 rgba(255, 240, 200, .4);
@@ -255,6 +257,7 @@ i.coin { display: inline-block; width: .9em; height: .9em; border-radius: 50%; b
     <div id="res-goals" class="goals"></div>
     <p id="res-msg" class="msg" aria-live="polite"></p>
     <div id="res-stats" class="stats"></div>
+    <div id="res-combo" class="combo-line"></div>
     <div class="row">
       <button id="res-main" class="btn leaf" type="button">Next level</button>
       <button id="res-restart" class="btn wood" type="button" hidden>Restart level</button>
@@ -357,18 +360,18 @@ const ZOOM = 1.35, VIEW_Y0 = Math.round(GROUND - 318 / ZOOM);   // fight camera
 
 const LEVELS = [
   { name: 'Misty Woods', diff: 'Easy', tag: 'easy', theme: 'forest', song: 'meadow', sword: 0,
-    boss: 'ogre', bossName: 'Grumbold the Ogre', par: 120, dm: 0.75, hm: 1, maxAlive: 3,
-    waves: [['wolf', 'wolf', 'wolf'], ['wolf', 'bandit', 'wolf', 'bandit']],
+    boss: 'ogre', bossName: 'Grumbold the Ogre', par: 120, dm: 0.75, hm: 1, maxAlive: 2,
+    waves: [['wolf', 'bandit', 'wolf'], ['bandit', 'wolf', 'wolf', 'bandit']],
     plats: [] },
   { name: 'Harvest Village', diff: 'Medium', tag: 'med', theme: 'village', song: 'sunset', sword: 1,
     boss: 'darkknight', bossName: 'The Dark Knight', par: 150, dm: 1, hm: 1.15, maxAlive: 4,
-    waves: [['bandit', 'wolf', 'bandit', 'wolf'], ['archer', 'bandit', 'bandit', 'archer'],
-            ['bandit', 'archer', 'wolf', 'bandit', 'archer', 'wolf']],
+    waves: [['bandit', 'wolf', 'bandit', 'wolf'], ['archer', 'bandit', 'wolf', 'archer'],
+            ['bandit', 'archer', 'wolf', 'crow', 'bandit', 'archer']],
     plats: [] },
   { name: 'Stone Keep', diff: 'Hard', tag: 'hard', theme: 'keep', song: 'castle', sword: 2,
     boss: 'dragon', bossName: 'Ember the Dragon', par: 200, dm: 1.2, hm: 1.3, maxAlive: 5,
-    waves: [['guard', 'crow', 'bandit', 'crow'], ['archer', 'guard', 'crow', 'archer', 'crow'],
-            ['guard', 'guard', 'archer', 'crow', 'crow', 'archer', 'bandit']],
+    waves: [['guard', 'crow', 'bandit', 'wolf'], ['archer', 'guard', 'crow', 'wolf', 'archer'],
+            ['guard', 'crow', 'archer', 'guard', 'wolf', 'crow', 'archer']],
     plats: [] }
 ];
 
@@ -405,7 +408,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('knightspath_' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('knightspath_' + k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } }
 };
-const save = Object.assign({ unlocked: 1, stars: [0, 0, 0], coins: 0, music: true, sfx: true, tutorial: false, potions: 0, owned: [], introSeen: false, trophies: [] }, store.get('save', {}));
+const save = Object.assign({ unlocked: 1, stars: [0, 0, 0], coins: 0, music: true, sfx: true, tutorial: false, potions: 0, owned: [], introSeen: false, trophies: [], bestCombo: [0, 0, 0] }, store.get('save', {}));
 save.tally = Object.assign({ kills: 0, wolves: 0, bandits: 0, arrows: 0, blocks: 0 }, save.tally);
 save.look = Object.assign({ armor: 'steel', cape: 'crimson', kitty: 'none' }, save.look);
 function persist() { store.set('save', save); }
@@ -2600,7 +2603,7 @@ function startLevel(i, cp) {
   G = { li: i, L, th, t: 0, time: cp ? cp.time : 0, hero: makeHero(), enemies: [], projs: [], pickups: [], parts: [], dust: [], fx: [], texts: [],
         amb: makeAmbient(th), phase: cp ? 'checkpoint' : 'intro', phaseT: 0, waveIdx: -1, queue: [], spawnT: 0, spawnSide: 1,
         boss: null, egg: null, banner: null, cat: null, pet: null, cut: true, coins: cp ? cp.coins : 0, potUsed: !!(cp && cp.pot), camX: 0, lastCam: 0, shake: 0, kx: 0, ky: 0,
-        hitstop: 0, slow: 1, slowT: 0, flash: 0, heartHit: 0, said: {}, flags: {}, cp: cp || null };
+        hitstop: 0, slow: 1, slowT: 0, flash: 0, heartHit: 0, said: {}, flags: {}, cp: cp || null, cmb: { n: 0, t: 0, best: 0, pop: 1, fade: 0, last: 0, coinT: 0 } };
   const h = G.hero;
   G.cat = i === 0 && !cp ? { x: h.x + 16, y: GROUND, face: -1, state: 'sit', t: 0, anim: 0 } : null;   // the cat only greets you at the start of level 1
   if (cp) { h.arrows = Math.max(12, cp.arrows || 0); if (cp.boss) placeBoss(); }   // full hearts, at least 12 arrows, the boss already waits
@@ -2643,7 +2646,7 @@ function stepGame(dt0) {
   if (state !== 'play') return;
   updateHero(dt); updateCat(dt); updatePet(dt);
   if (G.phase !== 'dying') for (const e of G.enemies) updateEnemy(e, dt);
-  separate(); updateProjs(dt); updatePickups(dt); updateParticles(dt); updateTexts(dt);
+  separate(); updateProjs(dt); updatePickups(dt); updateParticles(dt); updateTexts(dt); comboTick(dt);
   if (G.egg) updateEgg(dt);
   G.enemies = G.enemies.filter((e) => !e.gone);
   const h = G.hero; let fx = h.x + h.face * 30;
@@ -2673,7 +2676,7 @@ function touchHero(e, dmg, o) { const h = G.hero; if (!h.dead && rectsHit(eRect(
 function updateHero(dt) {
   const h = G.hero;
   h.inv = Math.max(0, h.inv - dt); h.flash = Math.max(0, h.flash - dt); h.hurtT = Math.max(0, h.hurtT - dt); h.landT = Math.max(0, h.landT - dt);
-  if (h.dead) { h.deadT += dt; h.vx = approach(h.vx, 0, 400 * dt); physics(h, dt, true); return; }
+  if (h.dead) { h.deadT += dt; h.vx = approach(h.vx, 0, (h.downT ? 900 : 400) * dt); physics(h, dt, true); h.x = clamp(h.x, 12, WORLD_W - 12); if (h.onGround || h.downT) updateDeath(h, dt); return; }
   let inp = Input.read();
   if (G.cut || h.petting || G.catScene) { inp = NOINP; h.bow = null; }
   if (h.weapon === 'bow' && inp.kHeld) inp = Object.assign({}, inp, { x: 0, y: 0 });   // keyboard: the arrow keys aim the bow while J is held
@@ -2817,6 +2820,7 @@ function hurtHero(dmg, srcX, o) {
     if (!o.heavy) { h.inv = 0.15; return 'blocked'; }
     dmg *= 0.25;
   }
+  breakCombo();
   h.hp = Math.max(0, h.hp - dmg); G.lowHp = Math.min(G.lowHp == null ? h.maxHp : G.lowHp, h.hp); h.inv = 1.0; h.flash = 0.18; h.hurtT = 0.22;
   h.vx = (Math.sign(h.x - srcX) || -h.face) * 230; h.vy = -230; h.onGround = false; h.atk = null; h.bow = null; h.queued = false;
   sfx('hurt'); buzz(45); kick(Math.sign(h.x - srcX) || -h.face, 4); G.heartHit = 0.35;
@@ -2826,8 +2830,24 @@ function hurtHero(dmg, srcX, o) {
   return true;
 }
 function heroDie() {
-  const h = G.hero; h.dead = true; h.deadT = 0; h.block = false; h.bow = null; h.atk = null;
+  const h = G.hero; h.dead = true; h.deadT = 0; h.block = false; h.bow = null; h.atk = null; h.roll = null;
   G.phase = 'dying'; G.phaseT = 0; G.slow = 0.5; G.slowT = 1.0; Msg.clear(); sfx('die');
+}
+/* the knight's fall, once he is back on the ground: down on both knees (0.5 s), then forward flat on the ground
+   (0.4 s, a thud), the weapon slipping from his hand and clattering down beside him. The pose is in heroPose. */
+function updateDeath(h, dt) {
+  const t0 = h.downT || 0, t = h.downT = t0 + dt;
+  if (!t0) { dust(h.x, h.y, 5); if (h.x + h.face * 64 > WORLD_W || h.x + h.face * 64 < 0) h.face = -h.face; }   // knees down; never fall out of the world
+  if (t0 < 0.5 && t >= 0.5) {
+    const sw = h.weapon === 'sword';
+    h.dropW = { sw, x: h.x + h.face * (sw ? 6 : -3), y: h.y - 13, vx: h.face * (sw ? 150 : -60), vy: -70, a: sw ? 0.6 : -1.2, va: sw ? -2.2 : 4.6, rest: false };
+  }
+  if (t0 < 0.9 && t >= 0.9) { sfx('stomp', 0.45); dust(h.x + h.face * 20, h.y, 12, true); kick(h.face, 2); }
+  const d = h.dropW;
+  if (d && !d.rest) {
+    d.vy += 900 * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.a += d.va * dt;
+    if (d.y >= h.y - 2) { d.y = h.y - 2; d.a = 0; d.va = 0; if (d.vy > 120) { d.vy = -d.vy * 0.25; d.vx *= 0.5; sfx('land'); dust(d.x, h.y, 3); } else d.rest = true; }
+  }
 }
 
 /* ---------- damage to enemies ---------- */
@@ -2844,6 +2864,7 @@ function damageEnemy(e, dmg, dir, src, hx, hy, o) {
   }
   const crit = !!o.crit; if (crit) dmg *= 1.8;
   e.hp -= dmg; e.flash = 0.11; e.hpShow = 2.2;
+  if (src === 'sword' || src === 'arrow') addCombo(e);
   floatText(e.x + rand(-5, 5), e.y - e.h - 6, Math.round(dmg) + (crit ? '!' : ''), crit ? '#f2c35a' : '#efe6d2', crit ? 19 : o.heavy ? 14 : 12);
   impact(hx, hy, dir, src, crit, !!o.heavy, !!o.power);
   if (src === 'arrow') { if (!sfx('thunk', e.armored)) sfx('hit', e.armored, false); } else sfx('hit', e.armored, !!(o.heavy || crit));
@@ -2857,6 +2878,20 @@ function damageEnemy(e, dmg, dir, src, hx, hy, o) {
   kick(dir, (o.heavy ? 4.5 : 2) + (crit ? 2 : 0) + (e.boss ? 1 : 0));
   if (e.hp <= 0) killEnemy(e, dir);
   return true;
+}
+/* ---------- hit combo: every sword or arrow hit adds 1; getting hurt or 3 s without a hit ends it; every 10th hit pays a coin ---------- */
+function addCombo(e) {
+  const k = G.cmb; if (!k) return;
+  k.n++; k.t = 3; k.pop = 0; k.fade = 0; k.best = Math.max(k.best, k.n);
+  if (k.n % 10 === 0) {
+    G.coins++; k.coinT = 0.8; sfx('coin');
+    for (let i = 0; i < 4; i++) part({ kind: 'star', x: e.x + rand(-10, 10), y: e.y - e.h - rand(2, 16), vy: rand(-30, -10), life: rand(0.3, 0.5), size: rand(3, 5), color: '#f0d890' });
+  }
+}
+function breakCombo() { const k = G.cmb; if (!k) return; if (k.n >= 5) { k.last = k.n; k.fade = 0.45; } k.n = 0; k.t = 0; }
+function comboTick(dt) {
+  const k = G.cmb; k.pop += dt; k.fade = Math.max(0, k.fade - dt); k.coinT = Math.max(0, k.coinT - dt);
+  if (k.n > 0) { k.t -= dt; if (k.t <= 0) breakCombo(); }
 }
 function impact(x, y, dir, src, crit, heavy, power) {
   const sw = SWORDS[G.L.sword], tc = rgbStr(sw.trail), n = heavy ? 12 : 7;
@@ -3258,7 +3293,16 @@ function heroPose(h) {
   if (h.landT > 0) P.crouch = 0.6;
   if (h.roll) { P.crouch = 1.5; P.feet = [4, -6, -2, -5]; P.rot = (h.roll.t / ROLL_T) * Math.PI * 2; P.pivot = -18; P.cape = 1.3; P.arm = 1.3; P.wpn = 0.6; P.reach = 0.7; P.lean = 0; P.bob = 0; return P; }
   if (h.petting) { P.crouch = 1.5; P.feet = [6, 0, -7, 0]; P.weapon = 'none'; P.arm = 1.05 + Math.sin(T * 9) * 0.22; P.reach = 0.95; P.cape = 0.2; return P; }
-  if (h.dead) { P.rot = -Math.min(1.45, h.deadT * 5); P.weapon = h.weapon === 'sword' ? 'sword' : 'none'; P.arm = 0.6; return P; }
+  if (h.dead) {   // knocked back (hurt pose), then on his knees, then tipping forward flat onto the ground (see updateDeath)
+    const t = h.downT || 0; P.weapon = h.dropW ? 'none' : h.weapon; P.cape = 0.2; P.bob = 0;
+    if (!t) { P.lean = -2; P.arm = -0.5; P.wpn = -1.2; P.crouch = 0.2; return P; }
+    const k = easeOut(clamp(t / 0.2, 0, 1)), e = Math.pow(clamp((t - 0.5) / 0.4, 0, 1), 2);
+    P.crouch = 2 * k * (1 - e); P.lean = k > 0.5 && e < 0.5 ? 1 : 0;
+    P.feet = [lerp(lerp(3, -5, k), 2, e), 0, lerp(lerp(-3, -8, k), -2, e), 0];
+    P.arm = e > 0 ? lerp(1.15, -1.45, e) : lerp(0.95, 1.15, k); P.wpn = lerp(-0.95, 0.6, k); P.reach = e > 0 ? 0.95 : 0.8;
+    P.rot = e * Math.PI / 2; P.pivot = -4;
+    return P;
+  }
   if (h.hurtT > 0) { P.lean = -2; P.arm = -0.5; P.wpn = -1.2; P.crouch = 0.2; }
   if (h.block) { P.crouch = 0.55; P.feet = [5, 0, -5, 0]; P.off = 'block'; P.arm = 1.2; P.wpn = 0.5; P.lean = -1; P.reach = 0.7; return P; }
   if (h.weapon === 'sword') {
@@ -3314,8 +3358,12 @@ function dkPose(e) {
 
 /* ---------- drawing the world ---------- */
 function drawHeroEnt(c) {
-  const h = G.hero, P = heroPose(h), sw = SWORDS[G.L.sword];
-  shadowAt(c, h.x, 10);
+  const h = G.hero, P = heroPose(h), sw = SWORDS[G.L.sword], fall = h.dead ? Math.pow(clamp(((h.downT || 0) - 0.5) / 0.4, 0, 1), 2) : 0, d = h.dropW;
+  shadowAt(c, h.x + h.face * 20 * fall, 10 + 14 * fall);
+  if (d) {   // his dropped sword or bow
+    spr(c, d.x, d.y, h.face, { rot: d.a });
+    if (d.sw) { swordDraw(-sw.len * 0.45, 0, 0, sw, false); if (sw.glow) lightW(d.x, d.y, 16, '#8fd0f0', 0.3); } else bowDraw(0, 0, -Math.PI / 2, 0, false);
+  }
   if (h.inv > 0 && !h.dead && !h.roll && ((h.inv * 14) | 0) % 2) c.globalAlpha = 0.45;
   drawKnight(c, h.x, h.y, h.face, P, sw);
   c.globalAlpha = 1;
@@ -3474,7 +3522,8 @@ function updatePhase(dt) {
     }
     case 'wave': {
       G.spawnT -= dt; const alive = G.enemies.filter((e) => !e.boss).length;
-      if (G.queue.length && G.spawnT <= 0 && alive < L.maxAlive) { spawnNext(); G.spawnT = rand(0.7, 1.2); }
+      if (!alive) G.spawnT = Math.min(G.spawnT, 0.45);   // nobody left to fight: the next foe comes right away
+      if (G.queue.length && G.spawnT <= 0 && alive < L.maxAlive) { spawnNext(alive); G.spawnT = rand(0.7, 1.2); }
       if (!G.queue.length && alive === 0) { G.phase = 'waveClear'; G.phaseT = 0; sfx('waveClear'); say('waveClear'); supplies(); }
       break;
     }
@@ -3485,7 +3534,8 @@ function updatePhase(dt) {
       break;
     }
     case 'victory': updateVictory(); break;
-    case 'dying': if (t > 2.0) finishLevel(false); break;
+    case 'ending': updateEnding(dt); break;
+    case 'dying': if (t > 2.2) finishLevel(false); break;   // long enough to see the knight fall (updateDeath)
   }
 }
 function startWave(i) {
@@ -3493,10 +3543,12 @@ function startWave(i) {
   sfx('horn'); say('waveStart', { w: i + 1 });
   if (i === 0) scareCat();
 }
-function spawnNext() {
+/* foes come from the world's ends; into an empty arena they appear just out of sight instead, so there is no long walk in */
+function spawnNext(alive) {
   const type = G.queue.shift(), h = G.hero; G.spawnSide = -G.spawnSide;
-  let x = G.spawnSide < 0 ? 24 : WORLD_W - 24;
-  if (Math.abs(x - h.x) < 170) x = x < WORLD_W / 2 ? WORLD_W - 24 : 24;
+  const near = (s) => clamp(s < 0 ? G.camX - 30 : G.camX + VW + 30, 24, WORLD_W - 24);
+  let x = alive ? (G.spawnSide < 0 ? 24 : WORLD_W - 24) : near(G.spawnSide);
+  if (Math.abs(x - h.x) < 170) x = alive ? (x < WORLD_W / 2 ? WORLD_W - 24 : 24) : near(-G.spawnSide);
   const e = makeEnemy(type, x); G.enemies.push(e); puff(e.x, e.y - e.h / 2, 7, G.th.dust); sfx('poof');
   if (type === 'wolf' && Math.random() < 0.5) sfx('howl');
   if (type === 'crow') sfx('caw');
@@ -3768,11 +3820,12 @@ function updateVictory() {
     if (!f.petStarted && k && k.state === 'sit' && h.onGround && Math.abs(h.vx) < 5) { f.petStarted = true; say('catReturns'); startPet(); }
     if (f.petStarted && !G.pet) { f.petEnd = true; f.endT = t; }
   }
-  if ((f.petEnd && t - f.endT > 1.2 && !Msg.cur && !Msg.q.length) || t > 16) finishLevel(true);   // let Kitty finish her line
+  if ((f.petEnd && t - f.endT > 1.2 && !Msg.cur && !Msg.q.length) || t > 16) startEnding();   // let Kitty finish her line, then the ending
 }
 function finishLevel(win) {
   if (state !== 'play') return;
-  const i = G.li, L = G.L, h = G.hero;
+  const i = G.li, L = G.L, h = G.hero, combo = G.cmb.best, bc = save.bestCombo || (save.bestCombo = [0, 0, 0]), rec = bc[i] || 0;
+  if (combo > rec) bc[i] = combo;   // the best hit combo per level (kept after a defeat too)
   if (win) {
     const hpOk = h.hp >= h.maxHp * 0.5, parOk = G.time <= L.par, stars = 1 + (hpOk ? 1 : 0) + (parOk ? 1 : 0);
     save.stars[i] = Math.max(save.stars[i] || 0, stars); save.coins += G.coins;
@@ -3781,8 +3834,103 @@ function finishLevel(win) {
     if (i === LEVELS.length - 1) { award('hero'); if (!G.potUsed) award('nopot'); }
     if (save.coins >= 300) award('rich');
     persist(); deathCount[i] = 0; checkpoint = null;
-    showResult({ win: true, level: i, stars, hpOk, parOk, coins: G.coins, time: G.time });
-  } else { deathCount[i]++; showResult({ win: false, level: i, deaths: deathCount[i] }); }
+    showResult({ win: true, level: i, stars, hpOk, parOk, coins: G.coins, time: G.time, combo, rec });
+  } else { deathCount[i]++; if (combo > rec) persist(); showResult({ win: false, level: i, deaths: deathCount[i], combo, rec }); }
+}
+
+/* ---------- the ending, after Kitty's purr: a fade to a dawn road; the knight gets up and walks away with Kitty
+   into the sunrise until they are tiny dots in the light, then the results (no text, tap to skip) ---------- */
+const END = { cv: null }, END_HY = 64;
+const endRoadX = (r) => 160 + 34 * Math.sin(r * 3.4 + 0.3) * Math.sqrt(r);   // r: 1 = the near end of the road, 0 = the horizon
+function startEnding() {
+  G.phase = 'ending'; G.phaseT = 0; Msg.clear(); sfx('setBoss', false); sfx('setSong', 'title'); sfx('ambience', 'forest');
+  const E = G.ending = { t: 0, skip: false }, skip = () => { if (E.t > 0.8) E.skip = true; };
+  window.addEventListener('pointerdown', skip); window.addEventListener('keydown', skip);
+  E.off = () => { window.removeEventListener('pointerdown', skip); window.removeEventListener('keydown', skip); };
+}
+function updateEnding(dt) {
+  const E = G.ending; E.t += dt;
+  if (E.t > 8.4 || E.skip) { E.off(); E.t = Math.max(E.t, 8.4); finishLevel(true); }
+}
+/* the scene is painted once (night and dawn versions of the sky and the land, crossfaded); only the sun, birds,
+   banner and the two walkers are drawn each frame, into a 320x120 pixel buffer that is scaled up */
+function endingArt() {
+  if (END.cv) return END;
+  const W = 320, HY = END_HY, mix = (a, b, k) => toHex(a.map((v, i) => Math.round(v + (b[i] - v) * clamp(k, 0, 1))));
+  const sky = (top, mid, low, stars) => {
+    const cv = mkCanvas(W, 120), x = cv.getContext('2d');
+    for (let y = 0; y <= HY; y++) { const k = y / HY; x.fillStyle = k < 0.55 ? mix(top, mid, k / 0.55) : mix(mid, low, (k - 0.55) / 0.45); x.fillRect(0, y, W, 1); }
+    if (stars) { const r = rng(11); for (let i = 0; i < 70; i++) { x.fillStyle = r() < 0.3 ? '#fff4d8' : '#8f9ac2'; x.fillRect((r() * W) | 0, (r() * HY * 0.75) | 0, 1, 1); } }
+    return cv;
+  };
+  END.skyN = sky([14, 18, 40], [34, 36, 70], [72, 62, 98], true);
+  END.skyD = sky([74, 96, 146], [216, 142, 120], [252, 214, 146], false);
+  const land = mkCanvas(W, 120), L = land.getContext('2d'), r = rng(5), px = (x, y, w, h, col) => { L.fillStyle = col; L.fillRect(x, y, w, h); };
+  for (let x = 0; x < W; x++) {   // the far ridge and the castle's hill
+    const far = HY - 7 - Math.round(4 * Math.sin(x * 0.031 + 1) + 2 * Math.sin(x * 0.083)); px(x, far, 1, HY - far + 1, '#77708f');
+    if (x > 34 && x < 142) { const hy = HY - Math.round(16 * Math.sin(Math.PI * (x - 34) / 108)); px(x, hy, 1, HY - hy + 1, '#5f6273'); }
+  }
+  const cs = '#3b3651', cx = 88, cy = HY - 15, wins = [[cx - 3, cy - 21], [cx + 2, cy - 21], [cx - 23, cy - 12], [cx + 22, cy - 12], [cx, cy - 13]];   // the Stone Keep
+  px(cx - 22, cy - 9, 44, 10, cs); for (let i = 0; i < 22; i++) px(cx - 22 + i * 2, cy - 11, 1, 2, cs);
+  for (const tx of [cx - 26, cx + 19]) { px(tx, cy - 17, 7, 18, cs); for (let i = 0; i < 4; i++) px(tx + i * 2, cy - 19, 1, 2, cs); }
+  px(cx - 7, cy - 27, 14, 28, cs); for (let i = 0; i < 7; i++) px(cx - 7 + i * 2, cy - 29, 1, 2, cs);
+  px(cx - 1, cy - 36, 1, 7, cs); px(cx, cy - 36, 4, 2, '#8a3a32');
+  for (let x = 0; x < W; x++) { const nh = HY - 1 - Math.round(2.5 * Math.sin(x * 0.05 + 2) + 1.5 * Math.sin(x * 0.17)); px(x, nh, 1, HY - nh + 2, '#56634f'); }   // near hills
+  for (let y = HY + 1; y < 120; y++) {   // fields in perspective, hedgerows between them
+    const k = (y - HY) / (120 - HY), band = Math.floor(3.2 / k), haze = clamp(1 - k * 5, 0, 1) * 0.7, edge = band !== Math.floor(3.2 / ((y + 1 - HY) / (120 - HY)));
+    px(0, y, W, 1, mix(edge && k > 0.12 ? [70, 84, 48] : band % 2 ? [134, 126, 66] : [98, 114, 60], [120, 114, 130], haze));
+  }
+  spr(L, 0, 0, 1);
+  for (let i = 0; i < 26; i++) { const xb = -200 + i * 28; line(Math.round(160 + (xb - 160) * 0.16), HY + 9, xb, 119, '#6c7040'); }   // furrows
+  for (let y = HY; y < 120; y++) {   // the dirt road, winding to the horizon
+    const k = (y - HY) / (120 - HY), w = 1 + 86 * k, rx = endRoadX(k), x0 = Math.round(rx - w / 2), x1 = Math.round(rx + w / 2);
+    px(x0 - 1, y, x1 - x0 + 2, 1, '#5e4a33'); px(x0, y, Math.max(1, x1 - x0), 1, mix([172, 136, 94], [150, 132, 140], clamp(1 - k * 4, 0, 1) * 0.6));
+    if (w > 12) for (const f of [-0.24, 0.19]) px(Math.round(rx + w * f), y, Math.max(1, Math.round(w * 0.05)), 1, '#8a6a46');
+    if (r() < 0.5 * k) px(Math.round(x0 + r() * (x1 - x0)), y, 1, 1, r() < 0.5 ? '#c8a878' : '#7d6040');
+    if (r() < 0.6 * k) px(x0 - 2 - ((r() * 3) | 0), y - 1, 1, 2, '#4f6a3a');
+    if (r() < 0.6 * k) px(x1 + 1 + ((r() * 3) | 0), y - 1, 1, 2, '#4f6a3a');
+  }
+  END.pole = [214, 72]; px(214, 72, 2, 28, '#4a3424'); px(213, 70, 4, 2, '#c9a24e');   // the banner's pole
+  const landN = mkCanvas(W, 120), N = landN.getContext('2d');
+  N.drawImage(land, 0, 0); N.globalCompositeOperation = 'source-atop'; N.fillStyle = 'rgba(16,20,54,.62)'; N.fillRect(0, 0, W, 120); N.globalCompositeOperation = 'source-over';
+  for (const [x, y] of wins) { px(x, y, 1, 2, '#e8b860'); N.fillStyle = '#f0c470'; N.fillRect(x, y, 1, 2); }
+  END.landD = land; END.landN = landN; END.sp = mkCanvas(80, 64); END.cv = mkCanvas(W, 120); END.b = END.cv.getContext('2d');
+  return END;
+}
+function renderEnding(c, E) {
+  const A = endingArt(), b = A.b, W = 320, HY = END_HY, st = E.t - 0.6, dawn = easeInOut(clamp(st / 6.5, 0, 1));
+  b.imageSmoothingEnabled = false; b.globalCompositeOperation = 'source-over';
+  b.globalAlpha = 1; b.drawImage(A.skyN, 0, 0); b.globalAlpha = dawn; b.drawImage(A.skyD, 0, 0); b.globalAlpha = 1;
+  const sy = Math.round(lerp(HY + 9, HY - 6, dawn)), g = b.createRadialGradient(160, sy, 2, 160, sy, 110);   // the sun rises where the road ends
+  g.addColorStop(0, 'rgba(255,226,150,' + (0.15 + dawn * 0.65).toFixed(3) + ')'); g.addColorStop(1, 'rgba(255,190,120,0)');
+  b.fillStyle = g; b.fillRect(0, 0, W, HY + 1);
+  spr(b, 160, sy, 1); disc(0, 0, 9, '#ffd58a'); disc(0, 0, 7, '#fff1c8');
+  b.drawImage(A.landN, 0, 0); b.globalAlpha = dawn; b.drawImage(A.landD, 0, 0);
+  b.globalAlpha = 0.35 + dawn * 0.65; b.fillStyle = '#2e2838';
+  for (let i = 0; i < 5; i++) {   // a few birds
+    const bx = Math.round(((i * 71 + st * (9 + i * 2)) % 360) - 20), by = Math.round(16 + i * 6 + Math.sin(st * 1.3 + i) * 2), up = ((st * 6 + i * 1.7) | 0) % 2;
+    b.fillRect(bx, by, 1, 1); b.fillRect(bx - 2, by - up, 2, 1); b.fillRect(bx + 1, by - up, 2, 1);
+  }
+  b.globalAlpha = 1;
+  const [qx, qy] = A.pole;   // the banner flutters by the road
+  for (let i = 0; i < 12; i++) { const hgt = Math.round(7 * (1 - i / 12)) + 1, oy = Math.round(Math.sin(st * 7 - i * 0.7) * (i / 12) * 2); b.fillStyle = '#9a3028'; b.fillRect(qx + 2 + i, qy + 1 + oy, 1, hgt); b.fillStyle = '#6e2018'; b.fillRect(qx + 2 + i, qy + 1 + oy + hgt, 1, 1); }
+  const u = clamp((st - 1.1) / 5.4, 0, 1), k = 0.92 * Math.pow(1 - u, 1.7);   // he gets up, then they walk from the near end of the road to the horizon
+  if (u < 1) {
+    const x = endRoadX(k), y = HY + k * 56, face = endRoadX(Math.max(0, k - 0.02)) >= x ? 1 : -1, walk = Math.max(0, st - 1.1), ph = walk * 9, rise = easeOut(clamp((st - 0.3) / 0.6, 0, 1));
+    const sp = A.sp, s = sp.getContext('2d'); s.setTransform(1, 0, 0, 1, 0, 0); s.clearRect(0, 0, 80, 64);
+    const P = { crouch: 1.5 * (1 - rise), bob: walk && Math.abs(Math.sin(ph)) > 0.75 ? -1 : 0, lean: 0, arm: 0.95 + (walk ? Math.sin(ph) * 0.1 : 0), reach: 0.78, wpn: -0.95, weapon: 'sword', off: 'down', cape: 0.4 + Math.sin(st * 3) * 0.08, rot: 0,
+      feet: walk ? [Math.sin(ph) * 4, -Math.max(0, Math.cos(ph)) * 3, -Math.sin(ph) * 4, -Math.max(0, -Math.cos(ph)) * 3] : [lerp(6, 3, rise), 0, lerp(-7, -3, rise), 0] };
+    shadowAt(s, 28, 10, 58); drawKnight(s, 28, 58, face, P, SWORDS[2]);
+    drawCat(s, { x: 28 + face * 15, y: 58, face, state: walk ? 'run' : 'sit', anim: walk * 0.5, t: st });
+    s.setTransform(1, 0, 0, 1, 0, 0); s.globalCompositeOperation = 'source-atop'; s.fillStyle = 'rgba(40,30,52,' + Math.min(0.85, u * 1.3).toFixed(3) + ')'; s.fillRect(0, 0, 80, 64); s.globalCompositeOperation = 'source-over';   // backlit by the sunrise
+    const sc = k / 0.92 * 0.95;
+    b.globalAlpha = 1 - clamp((u - 0.8) / 0.2, 0, 1);
+    b.drawImage(sp, Math.round(x - 28 * sc), Math.round(y - 58 * sc), Math.max(1, Math.round(80 * sc)), Math.max(1, Math.round(64 * sc)));
+    b.globalAlpha = 1;
+  }
+  const z = H / 120, w = W * z;
+  c.imageSmoothingEnabled = false; c.fillStyle = '#0c0a10'; c.fillRect(0, 0, VW, H); c.drawImage(A.cv, Math.round((VW - w) / 2), 0, w, H);
+  if (st < 0.8) { c.fillStyle = 'rgba(0,0,0,' + (1 - st / 0.8).toFixed(3) + ')'; c.fillRect(0, 0, VW, H); }   // fade in
 }
 
 /* =====================================================================
@@ -3930,6 +4078,26 @@ function drawHUD(c) {
       for (let i = 0; i < Math.min(left, 8); i++) { c.fillStyle = 'rgba(18,12,8,.85)'; circ(c, px + 6 + i * 8, top + 42, 3); c.fillStyle = '#c9a86a'; circ(c, px + 6 + i * 8, top + 42, 2); }
     }
   }
+  drawCombo(c, VW - safe.r - 16, top + 72);
+}
+/* the hit combo (from 5 hits): pops on every hit, a thin bar shows the time left, a broken combo fades out grey */
+function drawCombo(c, x, y) {
+  const k = G.cmb; if (!k) return;
+  const live = k.n >= 5, n = live ? k.n : k.last; if (!live && k.fade <= 0) return;
+  const p = live ? Math.max(0, 1 - k.pop / 0.18) : 0, s = 1 + p * p * 0.55, txt = String(n);
+  const col = !live ? '#a39886' : n >= 30 ? '#f08a5a' : n >= 20 ? '#f2a64e' : n >= 10 ? '#f2c35a' : '#efe3c8';
+  c.save(); c.globalAlpha = live ? 1 : k.fade / 0.45;
+  c.textAlign = 'right'; c.textBaseline = 'alphabetic'; c.lineJoin = 'round'; c.strokeStyle = 'rgba(18,12,8,.92)'; c.fillStyle = col;
+  c.font = '700 ' + Math.round(22 * s) + 'px "Pixelify Sans", monospace'; const w = c.measureText(txt).width;
+  c.lineWidth = 4; c.strokeText(txt, x, y); c.fillText(txt, x, y);
+  c.font = '700 ' + Math.round(14 * s) + 'px "Pixelify Sans", monospace'; c.lineWidth = 3; c.strokeText('x', x - w - 1, y); c.fillText('x', x - w - 1, y);
+  if (live) { const bw = 30; c.fillStyle = 'rgba(18,12,8,.85)'; c.fillRect(x - bw - 1, y + 4, bw + 2, 4); c.fillStyle = col; c.fillRect(x - bw, y + 5, Math.round(bw * clamp(k.t / 3, 0, 1)), 2); }
+  if (k.coinT > 0) {   // every 10th hit: a coin pops up with a twinkle
+    const q = 1 - k.coinT / 0.8, cx = x - w - 26, cy = y - 12 - q * 14, r = 2 + Math.sin(q * Math.PI) * 4;
+    c.globalAlpha = Math.min(1, k.coinT / 0.3); drawIcon(c, iconCoin(), cx, cy, 1.5);
+    c.strokeStyle = '#fff6d0'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(cx + 5 - r, cy - 5); c.lineTo(cx + 5 + r, cy - 5); c.moveTo(cx + 5, cy - 5 - r); c.lineTo(cx + 5, cy - 5 + r); c.stroke();
+  }
+  c.restore();
 }
 
 /* ---------- the message scroll (types itself, tick tick tick) ---------- */
@@ -4328,6 +4496,7 @@ function showResult(r) {
     $('res-restart').onclick = () => { sfx('ui'); cloudTransition(() => startLevel(r.level), { quick: true }); };
     sfx('defeat');
   }
+  $('res-combo').textContent = r.combo >= (r.win ? 1 : 5) ? 'Best combo x' + r.combo + (r.rec > r.combo ? '  (record x' + r.rec + ')' : r.rec && r.combo > r.rec ? '  (new record)' : '') : '';
   $('res-restart').hidden = !cp;
   $('res-msg').textContent = '';
   showScreen('scr-result');
@@ -4461,7 +4630,12 @@ function drawFrame(dt, report) {
   try {
     c.setTransform(DPR * SCALE, 0, 0, DPR * SCALE, 0, 0); c.globalAlpha = 1;
     if (state === 'story') renderStory(c, dt);
-    else if (G && (state === 'play' || state === 'paused' || state === 'result')) { renderGame(c); drawWeather(c, state === 'play' ? dt : 0); drawHUD(c); Msg.draw(c); drawBanner(c); if (state === 'play') drawControls(c); }
+    else if (G && G.ending && G.ending.t >= 0.6) renderEnding(c, G.ending);
+    else if (G && (state === 'play' || state === 'paused' || state === 'result')) {
+      renderGame(c); drawWeather(c, state === 'play' ? dt : 0);
+      if (G.ending) { c.fillStyle = 'rgba(0,0,0,' + clamp(G.ending.t / 0.6, 0, 1).toFixed(3) + ')'; c.fillRect(0, 0, VW, H); }   // fading out to the ending
+      else { drawHUD(c); Msg.draw(c); drawBanner(c); if (state === 'play') drawControls(c); }
+    }
     else { renderTitle(c, dt); if (state === 'shop') drawShopPreview(); else if (state === 'levels') drawMap(dt); }
   } catch (err) { report(err); }
   try { renderFx(dt); } catch (err) { report(err); }
@@ -4518,7 +4692,7 @@ function boot() {
   showScreen('scr-title');
   requestAnimationFrame(frame);
   ['forest', 'village', 'keep'].forEach((n, i) => setTimeout(() => { try { buildTheme(n); } catch (e) { console.error(e); } }, 600 + i * 350));   // paint the lands while the title shows
-  if (window.KP_TEST || /test/.test(location.hash)) window.KP = { startLevel, startBoss, startWave, get G() { return G; }, get state() { return state; }, save, Snd, Input, tick: testTick, openShop, shopAct, drinkPotion: () => G && drinkPotion(G.hero), openTrophies, award, startStory, Story };
+  if (window.KP_TEST || /test/.test(location.hash)) window.KP = { startLevel, startBoss, startWave, get G() { return G; }, get state() { return state; }, save, Snd, Input, tick: testTick, openShop, shopAct, drinkPotion: () => G && drinkPotion(G.hero), openTrophies, award, startStory, Story, damageEnemy, hurtHero, finishLevel, startEnding };
 }
 boot();
 
