@@ -125,6 +125,30 @@ i.coin { display: inline-block; width: .9em; height: .9em; border-radius: 50%; b
 .stats { display: flex; gap: 18px; font-weight: 700; font-size: clamp(13px, 4vh, 18px); font-variant-numeric: tabular-nums; }
 .stats:empty { display: none; }
 
+/* coin shop: a merchant's parchment list beside a framed view of the knight and Kitty */
+.btn.brass { background: linear-gradient(#d2b066, #8f6f34); color: #2a1d10; border-color: #21170f; text-shadow: 0 1px 0 rgba(255, 240, 200, .4);
+  box-shadow: inset 0 0 0 2px rgba(255, 240, 200, .35), 0 4px 0 #160f0a, 0 8px 14px rgba(0, 0, 0, .35); }
+.shop { display: flex; gap: clamp(14px, 3vw, 30px); align-items: center; justify-content: center; width: min(940px, 100%); height: 100%; }
+.shop-side { flex: none; display: flex; flex-direction: column; align-items: center; gap: clamp(6px, 2vh, 12px); }
+.shop-view { position: static; width: clamp(150px, 30vw, 240px); height: auto; aspect-ratio: 11 / 6; image-rendering: pixelated; border-radius: 4px;
+  background: radial-gradient(ellipse at 50% 85%, #55634d, #1f2620 75%); border: 3px solid #1a120c; box-shadow: inset 0 0 0 2px #a8864c, 0 6px 14px rgba(0, 0, 0, .45); }
+.shop-list { flex: 1 1 auto; align-self: stretch; margin-block: 14px; padding: 6px 6px 8px 14px; max-width: 620px; }
+.shop-note { margin: 0; min-height: 1.3em; font-size: clamp(12px, 3.6vh, 15px); font-weight: 700; color: var(--red); }
+.shop-items { align-self: stretch; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 6px; text-align: left; touch-action: pan-y; }
+.shop-items h3 { margin: 6px 0 4px; font-family: var(--f-title); font-weight: 400; font-size: clamp(20px, 6.5vh, 28px); line-height: 1; color: #5e241d; }
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+.item { display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 3px; padding: 5px 4px 6px; border-radius: 4px; text-align: center;
+  background: rgba(255, 248, 230, .32); border: 2px solid rgba(91, 65, 40, .55); font-size: clamp(11px, 3.4vh, 14px); font-weight: 700; color: var(--ink); }
+.item.on { border-color: #5d6a44; background: rgba(196, 210, 150, .35); }
+.item small { font-weight: 600; font-size: .9em; color: var(--ink-soft); }
+.pic { height: 56px; display: flex; align-items: center; } .pic img { image-rendering: pixelated; } .x1 { height: 56px; } .x2 { height: 52px; } .x3 { height: 42px; }
+.ibtn { appearance: none; cursor: pointer; font-family: var(--f-ui); font-weight: 700; font-size: clamp(11px, 3.4vh, 14px); color: #f0e8cf; padding: .15em .7em; border-radius: 4px;
+  border: 2px solid #1b1f12; background: linear-gradient(#6c7a4c, #4c5734); box-shadow: 0 2px 0 #11140a; white-space: nowrap; }
+.ibtn.buy { color: #2a1d10; border-color: #21170f; background: linear-gradient(#d9b866, #9a7838); box-shadow: 0 2px 0 #160f0a; }
+.ibtn:disabled { cursor: default; color: #46532f; background: none; border-color: transparent; box-shadow: none; }
+.ibtn:active:not(:disabled) { transform: translateY(2px); box-shadow: none; }
+.ibtn:focus-visible { outline: 3px solid #e9d7a9; outline-offset: 2px; }
+
 /* turn-your-phone overlay */
 #rotate { z-index: 40; background: linear-gradient(#1b2232, #3c3a44); }
 #rotate .tagline { color: #e6d9b8; }
@@ -154,6 +178,22 @@ i.coin { display: inline-block; width: .9em; height: .9em; border-radius: 50%; b
   <div class="row">
     <button id="btn-back" class="btn wood small" type="button">Back</button>
     <span class="purse" aria-label="Coins"><i class="coin"></i><span id="coin-total">0</span></span>
+    <button id="btn-shop" class="btn brass small" type="button">Shop</button>
+  </div>
+</section>
+
+<section id="scr-shop" class="screen" data-screen hidden>
+  <div class="shop">
+    <div class="shop-side">
+      <h2 class="ribbon">Shop</h2>
+      <canvas id="shop-view" class="shop-view" width="220" height="120" role="img" aria-label="Your knight and Kitty in their current look"></canvas>
+      <span class="purse" aria-label="Coins"><i class="coin"></i><span id="shop-coins">0</span></span>
+      <button id="shop-back" class="btn wood small" type="button">Back</button>
+    </div>
+    <div class="scroll shop-list">
+      <p id="shop-note" class="shop-note" aria-live="polite"></p>
+      <div id="shop-items" class="shop-items"></div>
+    </div>
   </div>
 </section>
 
@@ -203,30 +243,60 @@ i.coin { display: inline-block; width: .9em; height: .9em; border-radius: 50%; b
                  {boss} boss name, {arrows} arrows left, {sword} new sword name
    Put several texts in one list and the game picks one at random.        */
 const MESSAGES = {
-  levelStart:    ["Level {n}: {name}. Be brave, Sir Knight!"],
-  tutorial:      ["Left stick moves you. Push up to jump, down to raise your shield."],
-  waveStart:     ["Wave {w} of {total}. Here they come!"],
-  waveClear:     ["Wave cleared! Catch your breath."],
+  levelStart:    ["{name}. The road goes on.", "{name}... something is watching me."],
+  tutorial:      ["Left stick to move. Up to jump, down to raise my shield."],
+  waveStart:     ["Wave {w} of {total}. Here they come."],
+  waveClear:     ["That's the last of them... for now."],
   bossAppear:    ["You dare walk into my land, little knight?"],
-  dragonEgg:     ["What is that... an egg?!"],
-  bossHalf:      ["{boss} is weakening. Keep fighting!"],
-  struggle:      ["Courage! Hold DOWN to raise your shield.", "You are hurt. Look for hearts!"],
+  dragonEgg:     ["An egg... that big? This can't be good."],
+  bossHalf:      ["It's weakening. Keep pushing!"],
+  struggle:      ["I'm hurt... raise the shield.", "Careful... I can't take many more hits."],
   lowArrows:     ["Only {arrows} arrows left..."],
-  noArrows:      ["No arrows! Time for my sword."],
-  catReturns:    ["Kitty! You came back!"],
-  defeat:        ["You fell... but a true knight always rises again."],
-  defeatAgain:   ["Tip: block with your shield, then strike when they miss."],
-  checkpoint:    ["Back to wave {w}. You can do it!"],
-  checkpointBoss: ["Back to face {boss}. You can do it!"],
-  levelComplete: ["Victory! The land is a little safer."],
-  swordUpgrade:  ["Your sword is now {sword}!"],
-  gameComplete:  ["The dragon is defeated. The kingdom is saved!"],
-  bowTip:        ["Bow tip: hold the fight button and slide your thumb back to aim. Let go to shoot!"],
-  bowTipKeys:    ["Bow tip: hold J to draw the bow. Longer means stronger. Let go to shoot!"]
+  noArrows:      ["Out of arrows. Sword it is."],
+  catHello:      ["Mrrp! Come back safe."],
+  catReturns:    ["Kitty! You waited for me."],
+  catBye:        ["Purrr... my hero."],
+  defeat:        ["I fell... but I'll rise again."],
+  defeatAgain:   ["Block with the shield, then strike when they miss."],
+  checkpoint:    ["Wave {w} again. This time I won't fall."],
+  checkpointBoss: ["{boss}. Round two."],
+  levelComplete: ["The path is clear. On to the next land."],
+  swordUpgrade:  ["My sword is now {sword}!"],
+  gameComplete:  ["The dragon is gone. Time to rest... with Kitty."],
+  bowTip:        ["My bow: hold the strike button, slide back to aim, let go to shoot."],
+  bowTipKeys:    ["My bow: hold J to draw. Longer means stronger. Let go to shoot."]
 };
-/* who says each message: 'king' (default), 'knight' or 'boss' */
-const SPEAKER_OF = { lowArrows: 'knight', noArrows: 'knight', catReturns: 'knight', bossAppear: 'boss' };
-const SPEAKER_NAME = { king: 'The King', knight: 'Sir Knight' };
+/* who says each message: 'knight' (default), 'cat' or 'boss' */
+const SPEAKER_OF = { bossAppear: 'boss', catHello: 'cat', catBye: 'cat' };
+const SPEAKER_NAME = { knight: 'Sir Knight', cat: 'Kitty' };
+
+/* ---------- the coin shop: potions, plus looks that are bought once and equipped any time ---------- */
+const SHOP = {
+  potion: { price: 25, heal: 40, max: 3 },
+  armor: [
+    { id: 'steel', name: 'Steel', price: 0, steel: ['#d0d3cf', '#a3aaa9', '#737b7c', '#4b5254'], leg: ['#8e9596', '#6b7273', '#525859'] },
+    { id: 'bronze', name: 'Bronze', price: 120, steel: ['#dcb88e', '#b08a5f', '#80613f', '#56402a'], leg: ['#a3815c', '#7f6345', '#604a35'] },
+    { id: 'black', name: 'Blackened', price: 150, steel: ['#86848a', '#5a585e', '#3e3c42', '#28272c'], leg: ['#55535a', '#424046', '#302f34'] },
+    { id: 'amethyst', name: 'Amethyst', price: 180, steel: ['#e4d6ef', '#b69ed2', '#8669a8', '#5c467b'], leg: ['#a68ec1', '#826b9e', '#64507c'] },
+    { id: 'gilded', name: 'Gilded', price: 220, steel: ['#f3e2a8', '#d2b264', '#a3823c', '#6c5428'], leg: ['#c2a15c', '#9a7d42', '#755f30'] }
+  ],
+  cape: [
+    { id: 'crimson', name: 'Crimson', price: 0, c: ['#7c342e', '#5b2522', '#96463c'], plume: ['#7e352f', '#5c2622'], field: ['#713b33', '#58302a'] },
+    { id: 'earth', name: 'Earth Brown', price: 60, c: ['#6e5337', '#523d28', '#8a6b49'] },
+    { id: 'royal', name: 'Royal Purple', price: 80, c: ['#5f3c7a', '#462b5c', '#7b5698'] },
+    { id: 'lilac', name: 'Rose Lilac', price: 80, c: ['#b48bac', '#91698a', '#d0adc7'] },
+    { id: 'forest', name: 'Forest Green', price: 80, c: ['#40593a', '#2f4229', '#58744d'] },
+    { id: 'midnight', name: 'Midnight Black', price: 100, c: ['#2b2832', '#1c1a21', '#3f3b49'] },
+    { id: 'snow', name: 'Snow White', price: 100, c: ['#e3dfd5', '#bcb6a9', '#f5f2eb'] }
+  ],
+  kitty: [
+    { id: 'none', name: 'Just Kitty', price: 0 },
+    { id: 'collar', name: 'Bell Collar', price: 50 },
+    { id: 'ribbon', name: 'Ribbon Bow', price: 60 },
+    { id: 'scarf', name: 'Knitted Scarf', price: 70 },
+    { id: 'crown', name: 'Tiny Crown', price: 120 }
+  ]
+};
 
 /* ---------- world (1 world unit = 1 pixel of the pixel-art buffer) ---------- */
 const H = 360, GROUND = 300, WORLD_W = 960;
@@ -283,7 +353,8 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('knightspath_' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('knightspath_' + k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } }
 };
-const save = Object.assign({ unlocked: 1, stars: [0, 0, 0], coins: 0, music: true, sfx: true, tutorial: false }, store.get('save', {}));
+const save = Object.assign({ unlocked: 1, stars: [0, 0, 0], coins: 0, music: true, sfx: true, tutorial: false, potions: 0, owned: [] }, store.get('save', {}));
+save.look = Object.assign({ armor: 'steel', cape: 'crimson', kitty: 'none' }, save.look);
 function persist() { store.set('save', save); }
 function buzz(ms) { try { if (save.sfx && navigator.vibrate && navigator.userActivation && navigator.userActivation.hasBeenActive) navigator.vibrate(ms); } catch (e) { /* not supported */ } }
 
@@ -1914,6 +1985,14 @@ const LOOKS = {
 };
 const IDLE_FEET = [3, 0, -3, 0];
 
+/* shop looks: the equipped armor and cape are copied onto the hero (Kitty's gear is read in drawCat) */
+function lookItem(kind, id) { return SHOP[kind].find((o) => o.id === id) || SHOP[kind][0]; }
+function applyLooks() {
+  const K = LOOKS.hero, a = lookItem('armor', save.look.armor), cp = lookItem('cape', save.look.cape), f = cp.field || cp.c;
+  K.steel = a.steel; K.leg = a.leg; K.cape = cp.c; K.plume = cp.plume || cp.c.slice(0, 2); K.shield.field = f[0]; K.shield.fieldD = f[1];
+}
+applyLooks();
+
 function shadowAt(ctx, x, w, gy) {
   ctx.globalAlpha = 0.3; spr(ctx, x, gy == null ? GROUND : gy, 1);
   oval(0, 0, w, Math.max(1.5, w * 0.2), '#0c0907'); ctx.globalAlpha = 1;
@@ -2087,22 +2166,24 @@ function drawKnight(ctx, x, y, face, P, W) { drawHuman(ctx, x, y, face, P, LOOKS
 
 /* ---------- portraits (20x20 pixel faces, cached) ---------- */
 const PORTRAITS = {
-  king() {
-    rect(3, 15, 14, 5, '#6e2a26'); rect(3, 15, 14, 1, '#8e3a32');
-    rect(5, 14, 10, 3, '#e2dccd'); dot(7, 15, '#2a2522'); dot(11, 16, '#2a2522'); dot(13, 15, '#2a2522');
-    rect(6, 6, 8, 7, '#cfa384'); rect(6, 6, 2, 7, '#b08468');
-    rect(5, 10, 10, 5, '#b9b2a4'); rect(5, 13, 10, 2, '#9a9386'); rect(8, 11, 4, 1, '#7a5a48');
-    rect(5, 6, 1, 5, '#9a9386'); rect(14, 6, 1, 5, '#9a9386');
-    dot(8, 8, '#2a2220'); dot(12, 8, '#2a2220'); rect(10, 9, 1, 2, '#b98a6c');
-    rect(5, 4, 10, 2, '#c9a24e'); dot(5, 3, '#c9a24e'); dot(7, 2, '#c9a24e'); dot(10, 2, '#c9a24e'); dot(12, 2, '#c9a24e'); dot(14, 3, '#c9a24e');
-    dot(9, 4, '#8a2f28'); dot(6, 4, '#3f6a8a'); dot(13, 4, '#3f6a8a'); rect(5, 5, 10, 1, '#9a7a38');
+  knight() {   // wears the equipped armor and plume
+    const K = LOOKS.hero, S = K.steel;
+    rect(4, 16, 12, 4, K.coat[0]); rect(4, 16, 12, 1, K.trim); rect(3, 16, 3, 3, S[1]); rect(14, 16, 3, 3, S[1]);
+    rect(5, 4, 10, 12, S[1]); rect(6, 3, 8, 1, S[1]);
+    rect(5, 4, 2, 12, S[2]); rect(7, 3, 4, 1, S[0]); rect(8, 4, 2, 3, S[0]); rect(14, 5, 1, 10, S[2]);
+    rect(8, 8, 7, 1, '#141517'); dot(12, 11, '#141517'); dot(12, 13, '#141517'); rect(5, 15, 10, 1, S[2]);
+    poly([10, 3, 12, 2, 5, 3, 1, 8, 4, 4], K.plume[0]); line(9, 3, 2, 7, K.plume[1]);
   },
-  knight() {
-    rect(4, 16, 12, 4, '#58697b'); rect(4, 16, 12, 1, '#b49556'); rect(3, 16, 3, 3, '#a3aaa9'); rect(14, 16, 3, 3, '#a3aaa9');
-    rect(5, 4, 10, 12, '#a3aaa9'); rect(6, 3, 8, 1, '#a3aaa9');
-    rect(5, 4, 2, 12, '#737b7c'); rect(7, 3, 4, 1, '#d0d3cf'); rect(8, 4, 2, 3, '#d0d3cf'); rect(14, 5, 1, 10, '#737b7c');
-    rect(8, 8, 7, 1, '#141517'); dot(12, 11, '#141517'); dot(12, 13, '#141517'); rect(5, 15, 10, 1, '#737b7c');
-    poly([10, 3, 12, 2, 5, 3, 1, 8, 4, 4], '#7e352f'); line(9, 3, 2, 7, '#5c2622');
+  cat() {      // Kitty, the orange tabby, with her equipped gear drawn at double size
+    const Q = CAT;
+    rect(5, 16, 10, 4, Q.o); rect(8, 15, 4, 5, Q.w);
+    poly([3, 9, 4, 2, 9, 6], Q.o); poly([11, 6, 16, 2, 17, 9], Q.o); poly([5, 7, 5, 4, 7, 6], Q.inner); poly([13, 6, 15, 4, 15, 7], Q.inner);
+    oval(10, 11, 7, 5.5, Q.o); rect(4, 13, 12, 2, Q.o);
+    dot(9, 6, Q.d); dot(11, 6, Q.d); rect(10, 6, 1, 3, Q.d); dot(4, 10, Q.d); dot(16, 10, Q.d); dot(4, 12, Q.d); dot(16, 12, Q.d);
+    rect(5, 10, 3, 2, Q.eye); rect(12, 10, 3, 2, Q.eye); rect(6, 10, 1, 2, Q.pupil); rect(13, 10, 1, 2, Q.pupil);
+    rect(8, 12, 4, 3, Q.w); rect(9, 12, 2, 1, Q.nose); dot(9, 14, Q.d); dot(10, 14, Q.d);
+    line(1, 12, 6, 13, Q.wD); line(1, 15, 6, 14, Q.wD); line(13, 13, 18, 12, Q.wD); line(13, 14, 18, 15, Q.wD);
+    if (save.look.kitty !== 'none') { spr(SP.c, 0, 0, 1, { s: 2 }); catGear(save.look.kitty, 5, 8, 5, 2); }
   },
   ogre() {
     rect(2, 15, 16, 5, '#5f4835'); rect(2, 15, 16, 1, '#8a7660');
@@ -2124,7 +2205,7 @@ const PORTRAITS = {
   }
 };
 function drawPortrait(c, who, x, y, size) {
-  const cv = pixIcon('pt-' + who, 20, 20, PORTRAITS[who] || PORTRAITS.king);
+  const L = save.look, cv = pixIcon('pt-' + who + (who === 'knight' ? L.armor + L.cape : who === 'cat' ? L.kitty : ''), 20, 20, PORTRAITS[who] || PORTRAITS.knight);
   c.imageSmoothingEnabled = false; c.drawImage(cv, x, y, size, size);
 }
 
@@ -2314,8 +2395,18 @@ function drawEgg(ctx, g) {
 }
 
 const CAT = { o: '#c47d3e', d: '#9a5a2a', l: '#dca066', w: '#e6dccb', wD: '#b9ae9a', nose: '#c4867a', eye: '#9cb35e', pupil: '#1d1a14', inner: '#d9a08a' };
+/* Kitty's shop gear, drawn around a neck point (nx, ny) and the top of her head (hx, hy) */
+const GEAR = { collar: ['#9a3a32', '#6e2620', '#d9b45a'], ribbon: ['#9c6fbe', '#71489a', '#c9a8e0'], scarf: ['#5e7f8c', '#46606b', '#ddd2b6'], crown: ['#e0bc5c', '#a5843a', '#a33a4c', '#f6e2a0'] };
+function catGear(g, nx, ny, hx, hy) {
+  const C = GEAR[g]; if (!C) return;
+  if (g === 'collar') { rect(nx - 2, ny, 5, 1, C[0]); dot(nx - 2, ny, C[1]); dot(nx + 1, ny + 1, C[2]); }
+  else if (g === 'ribbon') { rect(nx - 2, ny, 6, 1, C[1]); rect(nx - 1, ny - 1, 2, 3, C[0]); rect(nx + 2, ny - 1, 2, 3, C[0]); dot(nx - 1, ny - 1, C[2]); dot(nx + 2, ny - 1, C[2]); dot(nx + 1, ny, C[1]); dot(nx, ny + 2, C[1]); dot(nx + 3, ny + 2, C[1]); }
+  else if (g === 'scarf') { rect(nx - 2, ny - 1, 6, 2, C[0]); dot(nx - 1, ny - 1, C[2]); dot(nx + 2, ny, C[2]); rect(nx - 2, ny + 1, 2, 3, C[0]); dot(nx - 2, ny + 2, C[2]); dot(nx - 2, ny + 4, C[1]); dot(nx - 1, ny + 4, C[1]); }
+  else { rect(hx - 2, hy - 1, 5, 2, C[0]); rect(hx - 2, hy, 5, 1, C[1]); dot(hx - 2, hy - 2, C[3]); dot(hx, hy - 2, C[0]); dot(hx + 2, hy - 2, C[0]); dot(hx, hy - 1, C[2]); }
+}
 function drawCat(ctx, k) {
   const Q = CAT, st = k.state, ground = k.groundY != null ? k.groundY : k.y;
+  let ax = 2, ay = -10, bx = 3, by = -18;
   shadowAt(ctx, k.x, 8, ground);
   spr(ctx, k.x, k.y, k.face);
   if (st === 'run' || st === 'return') {
@@ -2326,7 +2417,7 @@ function drawCat(ctx, k) {
     for (const sx of [-5, -2, 1]) line(sx, -11 - up, sx + 1, -9 - up, Q.d);
     disc(9, -11 - up, 3.5, Q.o); poly([7, -13 - up, 8, -17 - up, 10, -14 - up], Q.o); poly([10, -14 - up, 12, -17 - up, 12, -12 - up], Q.o);
     dot(8, -15 - up, Q.inner); dot(11, -15 - up, Q.inner); dot(8, -13 - up, Q.d);
-    rect(11, -11 - up, 2, 2, Q.w); dot(13, -11 - up, Q.nose); dot(10, -12 - up, Q.eye);
+    rect(11, -11 - up, 2, 2, Q.w); dot(13, -11 - up, Q.nose); dot(10, -12 - up, Q.eye); ax = 7; ay = -9 - up; bx = 9; by = -14 - up;
     line(7, -6, 7 - a * 3, 0, Q.o, 2); line(-4, -6, -4 + a * 3, 0, Q.o, 2);
     dot(7 - a * 3, 0, Q.w); dot(-4 + a * 3, 0, Q.w);
   } else {
@@ -2337,7 +2428,7 @@ function drawCat(ctx, k) {
     line(-4, -11, 1, -11, Q.l);
     poly([1, -1, 3, -1, 4, -8, 2, -9], Q.w);
     rect(1, -5, 2, 5, Q.o); rect(1, -1, 2, 1, Q.w); rect(3, -4, 1, 4, Q.d); dot(3, -1, Q.w);
-    const y0 = -14 + hd;
+    const y0 = -14 + hd; ay = y0 + 4; by = y0 - 4;
     disc(3, y0, 4, Q.o); poly([-1, y0 - 2, 0, y0 - 7, 3, y0 - 3], Q.o); poly([4, y0 - 3, 7, y0 - 7, 7, y0 - 1], Q.o);
     dot(1, y0 - 4, Q.inner); dot(6, y0 - 4, Q.inner); dot(2, y0 - 4, Q.d); dot(4, y0 - 4, Q.d); line(0, y0 - 1, 1, y0, Q.l);
     rect(3, y0 + 1, 4, 2, Q.w); dot(6, y0 + 1, Q.nose);
@@ -2345,6 +2436,7 @@ function drawCat(ctx, k) {
     else { rect(1, y0 - 1, 1, 2, Q.eye); dot(1, y0, Q.pupil); rect(5, y0 - 1, 1, 2, Q.eye); dot(5, y0, Q.pupil); }
     line(7, y0 + 1, 10, y0, Q.wD); line(7, y0 + 2, 10, y0 + 2, Q.wD);
   }
+  if (save.look.kitty !== 'none') catGear(save.look.kitty, ax, ay, bx, by);
   if (st === 'alert') {
     spr(ctx, k.x, ground - 30, 1);
     rect(-4, -6, 9, 10, '#3a2a1e'); rect(-3, -5, 7, 8, '#ece3cc'); rect(0, -4, 1, 4, '#8a2f28'); dot(0, 1, '#8a2f28'); dot(0, 4, '#3a2a1e'); dot(-1, 4, '#3a2a1e'); dot(0, 5, '#3a2a1e');
@@ -2527,7 +2619,8 @@ function updateHero(dt) {
   let inp = Input.read();
   if (G.cut || h.petting || G.catScene) { inp = NOINP; h.bow = null; }
   if (inp.swap) swapWeapon(h);
-  const up = inp.y < -0.5, down = inp.y > 0.55, ax = Math.abs(inp.x);
+  if (inp.potion) drinkPotion(h);
+  const up =inp.y < -0.5, down = inp.y > 0.55, ax = Math.abs(inp.x);
   let mx = ax > 0.18 ? Math.sign(inp.x) * Math.min(1, (ax - 0.18) / 0.5) : 0;
   const wasBlock = h.block;
   h.block = down && h.onGround && !h.atk && !h.bow && h.hurtT <= 0;
@@ -2725,7 +2818,7 @@ function deathSound(t) {
 function killEnemy(e, dir) {
   if (e.boss) { startBossDeath(e); return; }
   e.gone = true; dissolve(e, dir || 1, false); deathSound(e.type);
-  const n = 2 + ((Math.random() * 2) | 0); for (let i = 0; i < n; i++) dropPickup('coin', e.x, e.y - e.h / 2);
+  const n = Math.random() < 0.25 ? 2 : 1; for (let i = 0; i < n; i++) dropPickup('coin', e.x, e.y - e.h / 2);
   const h = G.hero;
   if (h.hp < h.maxHp && Math.random() < 0.16) dropPickup('heart', e.x, e.y - e.h / 2);
   else if (Math.random() < (h.arrows < 6 ? 0.45 : 0.18)) dropPickup('arrows', e.x, e.y - e.h / 2);
@@ -3078,7 +3171,16 @@ function startPet() {
 function updatePet(dt) {
   const p = G.pet; if (!p) return; p.t += dt; const k = G.cat, h = G.hero;
   if (p.n < 3 && p.t > 0.35 + p.n * 0.4) { p.n++; loveHeart(k.x + k.face * 2 + rand(-3, 3), k.y - 24); sfx('love', p.n); }
-  if (p.t > 2.0) { G.pet = null; h.petting = false; if (k.state === 'pet') k.state = 'sit'; sfx('meow', false); }
+  if (p.t > 2.0) { G.pet = null; h.petting = false; if (k.state === 'pet') k.state = 'sit'; sfx('meow', false); say(G.catScene ? 'catBye' : 'catHello'); }
+}
+/* healing potions from the shop: +2 hearts each, carried in the save */
+function canDrink(h) { return !!G && !h.dead && (save.potions || 0) > 0 && h.hp < h.maxHp; }
+function drinkPotion(h) {
+  if (!canDrink(h)) { sfx('ui'); return; }
+  save.potions--; persist();
+  h.hp = Math.min(h.maxHp, h.hp + SHOP.potion.heal); sfx('heart'); floatText(h.x, h.y - 56, '+2 hearts', '#b8e08a');
+  for (let i = 0; i < 16; i++) part({ kind: 'star', x: h.x + rand(-13, 13), y: h.y - rand(4, 46), vx: rand(-22, 22), vy: rand(-80, -25), life: rand(0.5, 1.1), size: pick([2, 3]), color: pick(['#b8e08a', '#e8d27a', '#d8f0b0', '#f2dc96']) });
+  if (h.hp > h.maxHp * 0.6) G.said.struggle = false;
 }
 function loveHeart(x, y) {
   part({ kind: 'love', x, y, vx: rand(-10, 10), vy: -30, life: 1.6, ph: rand(0, 6) });
@@ -3242,7 +3344,7 @@ function sayText(key, vars) {
 }
 function say(key, vars) {
   const text = sayText(key, vars); if (!text || !G) return;
-  const who = SPEAKER_OF[key] || 'king';
+  const who = SPEAKER_OF[key] || 'knight';
   Msg.push(text, who === 'boss' ? G.L.boss : who, who === 'boss' ? G.L.bossName : SPEAKER_NAME[who]);
 }
 
@@ -3558,7 +3660,7 @@ function updateBossDying(e, dt) {
   e.gone = true; G.flash = 0.8; G.shake = 12; sfx('explode'); buzz(150);
   ringFx(e.x, e.y - e.h / 2, 8, 70, '#f4ead2', 0.5);
   for (let i = 0; i < 26; i++) part({ kind: 'ember', x: e.x, y: e.y - e.h / 2, vx: rand(-260, 260), vy: rand(-320, 60), life: rand(0.5, 1.1), size: 2, color: pick(['#fff4c2', '#f6d27a', '#e8a07a', '#ffffff']), grav: 300 });
-  for (let i = 0; i < 18; i++) dropPickup('coin', e.x, e.y - e.h / 2, rand(-260, 260), rand(-460, -200));
+  for (let i = 0; i < 10; i++) dropPickup('coin', e.x, e.y - e.h / 2, rand(-260, 260), rand(-460, -200));
   G.phase = 'victory'; G.phaseT = 0; G.boss = null; sfx('setBoss', false); sfx('victory');
 }
 function catReturn() {
@@ -3577,7 +3679,7 @@ function updateVictory() {
     if (!f.petStarted && k && k.state === 'sit' && h.onGround && Math.abs(h.vx) < 5) { f.petStarted = true; say('catReturns'); startPet(); }
     if (f.petStarted && !G.pet) { f.petEnd = true; f.endT = t; }
   }
-  if ((f.petEnd && t - f.endT > 1.2) || t > 14) finishLevel(true);
+  if ((f.petEnd && t - f.endT > 1.2 && !Msg.cur && !Msg.q.length) || t > 16) finishLevel(true);   // let Kitty finish her line
 }
 function finishLevel(win) {
   if (state !== 'play') return;
@@ -3597,11 +3699,12 @@ function finishLevel(win) {
    ===================================================================== */
 const Input = (() => {
   const keys = {}, joy = { id: null, bx: 0, by: 0, dx: 0, dy: 0 }, hitB = { id: null, sx: 0, sy: 0, x: 0, y: 0 }, swapB = { id: null };
-  let hitEdge = false, swapEdge = false, kHitPrev = false, kSwapPrev = false, relAim = null;
+  let hitEdge = false, swapEdge = false, kHitPrev = false, kSwapPrev = false, relAim = null, potEdge = false, kPotPrev = false;
   const JR = 50, HR = 38, SR = 25;
   const home = () => ({ x: safe.l + 30 + JR, y: H - 26 - JR });
   const hitPos = () => ({ x: VW - safe.r - 28 - HR, y: H - 26 - HR });
   const swapPos = () => { const p = hitPos(); return { x: p.x - 66, y: p.y - 50 }; };
+  const potPos = () => { const p = swapPos(); return { x: p.x - 60, y: p.y + 18 }; };   // healing potion flask
   const pausePos = () => ({ x: VW - safe.r - 22, y: 22 });
   const toV = (e) => { const r = cvs.getBoundingClientRect(); return { x: (e.clientX - r.left) / SCALE, y: (e.clientY - r.top) / SCALE }; };
   const capture = (e) => { try { cvs.setPointerCapture(e.pointerId); } catch (err) { /* not supported */ } };
@@ -3611,6 +3714,7 @@ const Input = (() => {
     const p = toV(e), pp = pausePos(), sp = swapPos();
     if (Math.hypot(p.x - pp.x, p.y - pp.y) < 24) { pauseGame(); return; }
     if (Math.hypot(p.x - sp.x, p.y - sp.y) < SR * 1.5) { swapB.id = e.pointerId; swapEdge = true; capture(e); return; }
+    const pt = potPos(); if (Math.hypot(p.x - pt.x, p.y - pt.y) < SR * 1.3) { potEdge = true; return; }
     if (p.x > VW * 0.5) { if (hitB.id === null) { hitB.id = e.pointerId; hitB.sx = hitB.x = p.x; hitB.sy = hitB.y = p.y; hitEdge = true; capture(e); } return; }
     if (joy.id === null) { joy.id = e.pointerId; joy.bx = clamp(p.x, safe.l + JR + 6, VW * 0.5 - JR); joy.by = clamp(p.y, H * 0.35, H - JR - 6); joy.dx = joy.dy = 0; capture(e); }
   }
@@ -3628,7 +3732,7 @@ const Input = (() => {
     if (e.pointerId === hitB.id) { if (e.type === 'pointerup') { const p = toV(e); hitB.x = p.x; hitB.y = p.y; } relAim = { dx: hitB.x - hitB.sx, dy: hitB.y - hitB.sy }; hitB.id = null; }
     if (e.pointerId === swapB.id) swapB.id = null;
   }
-  const CODES = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'KeyA', 'KeyD', 'KeyW', 'KeyS', 'KeyJ', 'KeyK', 'KeyX', 'KeyC', 'KeyQ'];
+  const CODES = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'KeyA', 'KeyD', 'KeyW', 'KeyS', 'KeyJ', 'KeyK', 'KeyX', 'KeyC', 'KeyQ', 'KeyH'];
   function key(e, v) {
     if (v && (e.code === 'Escape' || e.code === 'KeyP')) { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); return; }
     if (!CODES.includes(e.code)) return;
@@ -3642,11 +3746,12 @@ const Input = (() => {
     if (kx) x = kx; if (ky) y = ky;
     const kHit = !!(keys.KeyJ || keys.Space || keys.KeyX), kSwap = !!(keys.KeyK || keys.KeyQ || keys.KeyC);
     const aim = hitB.id !== null ? { dx: hitB.x - hitB.sx, dy: hitB.y - hitB.sy } : relAim;
-    const r = { x, y, hit: hitEdge || (kHit && !kHitPrev), hitHeld: hitB.id !== null || kHit, swap: swapEdge || (kSwap && !kSwapPrev), aim };
-    kHitPrev = kHit; kSwapPrev = kSwap; hitEdge = swapEdge = false; relAim = null;
+    const kPot = !!keys.KeyH;
+    const r = { x, y, hit: hitEdge || (kHit && !kHitPrev), hitHeld: hitB.id !== null || kHit, swap: swapEdge || (kSwap && !kSwapPrev), aim, potion: potEdge || (kPot && !kPotPrev) };
+    kHitPrev = kHit; kSwapPrev = kSwap; kPotPrev = kPot; hitEdge = swapEdge = potEdge = false; relAim = null;
     return r;
   }
-  function reset() { for (const k in keys) keys[k] = false; joy.id = hitB.id = swapB.id = null; joy.dx = joy.dy = 0; hitEdge = swapEdge = false; relAim = null; }
+  function reset() { for (const k in keys) keys[k] = false; joy.id = hitB.id = swapB.id = null; joy.dx = joy.dy = 0; hitEdge = swapEdge = potEdge = false; relAim = null; }
   function bind() {
     cvs.addEventListener('pointerdown', down, { passive: false });
     cvs.addEventListener('pointermove', move, { passive: false });
@@ -3654,7 +3759,7 @@ const Input = (() => {
     window.addEventListener('keydown', (e) => key(e, true)); window.addEventListener('keyup', (e) => key(e, false));
     window.addEventListener('blur', reset);
   }
-  return { JR, HR, SR, joy, hitB, home, hitPos, swapPos, pausePos, read, reset, bind, hitHeld: () => hitB.id !== null, swapHeld: () => swapB.id !== null };
+  return { JR, HR, SR, joy, hitB, home, hitPos, swapPos, potPos, pausePos, read, reset, bind, hitHeld: () => hitB.id !== null, swapHeld: () => swapB.id !== null };
 })();
 
 /* ---------- small drawing helpers ---------- */
@@ -3670,6 +3775,10 @@ function medallion(c, x, y, r, who) {
 }
 const iconCoin = () => pixIcon('coin', 9, 9, () => { oval(4.5, 4.5, 4, 4.3, '#6e5222'); oval(4.3, 4.3, 3.3, 3.5, '#cfa64e'); dot(3, 2, '#f0d890'); dot(2, 3, '#f0d890'); dot(5, 6, '#a8822f'); });
 const iconArrow = () => pixIcon('arrow', 15, 5, () => { line(2, 2, 11, 2, '#a88a62'); dot(12, 2, '#d0d4d4'); dot(13, 2, '#d0d4d4'); dot(12, 1, '#9aa0a0'); dot(12, 3, '#9aa0a0'); dot(1, 1, '#8a3b33'); dot(1, 3, '#d8d0bb'); dot(0, 1, '#8a3b33'); dot(0, 3, '#d8d0bb'); });
+const iconFlask = () => pixIcon('flask', 11, 14, () => {
+  rect(4, 0, 3, 2, '#7a5a3a'); rect(3, 2, 5, 3, '#2a201a'); rect(4, 2, 3, 3, '#cfc8b6');
+  disc(5.5, 9, 4.6, '#2a201a'); disc(5.5, 9, 3.7, '#cfc8b6'); oval(5.5, 10.2, 3.4, 2.6, '#a8463c'); rect(3, 8, 5, 1, '#c8604e'); dot(3, 6, '#f6f0e4'); dot(4, 5, '#f6f0e4');
+});
 const iconSword = (tier) => pixIcon('sword' + tier, 24, 24, () => swordDraw(5, 18, -0.785, SWORDS[tier], false));
 const iconBow = () => pixIcon('bow', 24, 28, () => bowDraw(8, 14, 0, 0.45, true));
 function plaque(c, x, y, txt) {
@@ -3709,6 +3818,7 @@ function drawHUD(c) {
   drawIcon(c, iconCoin(), L + 41, y2, 1.25); outlined(c, String(G.coins), L + 49, y2, '#efe3c8');
   drawIcon(c, iconArrow(), L + 78, y2, 1.1); outlined(c, String(h.arrows), L + 89, y2, h.arrows <= 3 ? '#e8a090' : '#efe3c8');
   outlined(c, h.weapon === 'sword' ? 'Sword' : 'Bow', L + 109, y2, '#d9c48e');
+  if (!touchMode) { c.globalAlpha = canDrink(h) ? 1 : 0.5; drawIcon(c, iconFlask(), L + 150, y2, 1); outlined(c, String(save.potions || 0), L + 158, y2, '#efe3c8'); c.globalAlpha = 1; }
   plaque(c, VW / 2, top + 15, String(Math.floor(G.time)));
   const right = VW - safe.r - 46, b = G.boss;
   if (b && b.showHud && !b.gone) {
@@ -3814,7 +3924,7 @@ function drawControls(c) {
   ring(c, pp.x, pp.y, 13, 'rgba(22,16,12,.78)', '#8f7240'); c.fillStyle = '#e6d6b0'; c.fillRect(pp.x - 4.5, pp.y - 5.5, 3, 11); c.fillRect(pp.x + 1.5, pp.y - 5.5, 3, 11);
   if (!touchMode) {
     c.font = '600 10px "Pixelify Sans", monospace'; c.textAlign = 'center'; c.textBaseline = 'alphabetic'; c.fillStyle = 'rgba(236,224,196,.7)';
-    c.fillText('Move: arrows / WASD    Jump: up    Shield: down    Strike: J or Space (hold to draw the bow)    Swap: K    Pause: P', VW / 2, H - 8);
+    c.fillText('Move: arrows / WASD   Jump: up   Shield: down   Strike: J or Space (hold to draw the bow)   Swap: K   Potion: H   Pause: P', VW / 2, H - 8);
     return;
   }
   const j = Input.joy, hm = Input.home(), R = Input.JR, bx = j.id !== null ? j.bx : hm.x, by = j.id !== null ? j.by : hm.y;
@@ -3846,6 +3956,11 @@ function drawControls(c) {
   c.fillStyle = 'rgba(240,230,206,.9)';
   c.beginPath(); c.moveTo(sp.x + 9.5, sp.y - 6); c.lineTo(sp.x + 5, sp.y - 3); c.lineTo(sp.x + 11, sp.y + 0.5); c.closePath(); c.fill();
   c.beginPath(); c.moveTo(sp.x - 9.5, sp.y + 6); c.lineTo(sp.x - 5, sp.y + 3); c.lineTo(sp.x - 11, sp.y - 0.5); c.closePath(); c.fill();
+  const pt = Input.potPos(), ok = canDrink(hero);   // potion flask: dimmed at full health or with none left
+  c.globalAlpha = ok ? 1 : 0.45;
+  ring(c, pt.x, pt.y, Input.SR - 3, 'rgba(18,12,8,.24)', ok ? 'rgba(196,224,150,.75)' : 'rgba(222,204,160,.65)');
+  drawIcon(c, iconFlask(), pt.x, pt.y, 1.5); outlined(c, String(save.potions || 0), pt.x + 14, pt.y + 14, '#efe3c8', 'center', 11);
+  c.globalAlpha = 1;
 }
 
 /* =====================================================================
@@ -3876,6 +3991,68 @@ function buildLevels() {
   });
   $('coin-total').textContent = save.coins;
 }
+/* ---------- the coin shop: potions, armor, capes and Kitty's gear ---------- */
+const SHOPV = { buf: null, thumbs: {} };
+function shopPaint(b, w, h, o) {   // the knight and/or Kitty in the equipped look, drawn with the game's own art
+  b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, w, h);
+  const gy = h - 3;
+  if (o.kx != null) {
+    shadowAt(b, o.kx, 10, gy);
+    drawKnight(b, o.kx, gy, 1, { cape: 0.3 + Math.sin(T * 2.4) * 0.12, arm: 0.35, wpn: -1.45, reach: 0.7, weapon: 'sword', off: 'down', bob: Math.sin(T * 2.2) > 0.6 ? 1 : 0 }, SWORDS[clamp(save.unlocked - 1, 0, 2)]);
+  }
+  if (o.cx != null) drawCat(b, { x: o.cx, y: gy, face: -1, state: 'sit', anim: T, t: 0 });
+}
+function drawShopPreview() {
+  const cv = $('shop-view'), g = cv.getContext('2d');
+  if (!SHOPV.buf) SHOPV.buf = mkCanvas(110, 60);
+  shopPaint(SHOPV.buf.getContext('2d'), 110, 60, { kx: 42, cx: 76 });
+  g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = false; g.clearRect(0, 0, cv.width, cv.height); g.drawImage(SHOPV.buf, 0, 0, cv.width, cv.height);
+}
+function shopThumb(kind, id) {    // every card shows the look it sells (painted once, then cached)
+  const key = kind + ':' + id; if (SHOPV.thumbs[key]) return SHOPV.thumbs[key];
+  const cat = kind === 'kitty', cv = mkCanvas(cat ? 26 : 34, cat ? 26 : 56), was = save.look[kind];
+  save.look[kind] = id; applyLooks();
+  try { shopPaint(cv.getContext('2d'), cv.width, cv.height, cat ? { cx: 13 } : { kx: 19 }); } finally { save.look[kind] = was; applyLooks(); }
+  return (SHOPV.thumbs[key] = cv.toDataURL());
+}
+function buildShop(note) {
+  $('shop-coins').textContent = save.coins;
+  if (note != null) $('shop-note').textContent = note;
+  const coin = (p) => '<i class="coin"></i> ' + p;
+  const card = (act, pic, name, sub, btn, cls, on) => '<div class="item' + (on ? ' on' : '') + '"><span class="pic">' + pic + '</span><span>' + name + '</span>' + (sub ? '<small>' + sub + '</small>' : '') +
+    '<button type="button" class="ibtn ' + cls + '" data-act="' + act + '"' + (cls === 'done' ? ' disabled' : '') + '>' + btn + '</button></div>';
+  const P = SHOP.potion, n = save.potions || 0, full = n >= P.max;
+  let h = '<h3>Potions</h3><div class="shop-grid">' + card('potion', '<img class="x3" src="' + iconFlask().toDataURL() + '" alt="">', 'Healing Potion',
+    'Heals 2 hearts. Carrying ' + n + '/' + P.max, full ? 'Bag full' : 'Buy ' + coin(P.price), full ? 'done' : 'buy') + '</div>';
+  for (const [kind, title] of [['armor', 'Armor'], ['cape', 'Cape'], ['kitty', 'Kitty']]) {
+    h += '<h3>' + title + '</h3><div class="shop-grid">';
+    for (const it of SHOP[kind]) {
+      const own = !it.price || save.owned.includes(kind + ':' + it.id), on = save.look[kind] === it.id;
+      h += card(kind + ':' + it.id, '<img class="' + (kind === 'kitty' ? 'x2' : 'x1') + '" src="' + shopThumb(kind, it.id) + '" alt="">', it.name, '',
+        on ? 'Equipped' : own ? 'Equip' : 'Buy ' + coin(it.price), on ? 'done' : own ? '' : 'buy', on);
+    }
+    h += '</div>';
+  }
+  $('shop-items').innerHTML = h;
+}
+function shopAct(act) {
+  if (act === 'potion') {
+    const P = SHOP.potion, n = save.potions || 0;
+    if (n >= P.max) return buildShop('My bag holds only ' + P.max + ' potions.');
+    if (save.coins < P.price) { sfx('ui'); return buildShop('Not enough coins yet. ' + (P.price - save.coins) + ' more, please.'); }
+    save.coins -= P.price; save.potions = n + 1; persist(); sfx('coin'); return buildShop('A healing potion! Drink it in battle.');
+  }
+  const [kind, id] = act.split(':'), it = lookItem(kind, id), key = kind + ':' + id;
+  let note = it.name + ' equipped.';
+  if (it.price && !save.owned.includes(key)) {
+    if (save.coins < it.price) { sfx('ui'); return buildShop('Not enough coins for ' + it.name + ' yet. ' + (it.price - save.coins) + ' more, please.'); }
+    save.coins -= it.price; save.owned.push(key); sfx('coin'); note = 'Bought ' + it.name + '! It suits ' + (kind === 'kitty' ? 'Kitty' : 'you') + '.';
+  }
+  save.look[kind] = id; persist(); applyLooks();
+  sfx(kind === 'kitty' ? 'love' : 'ui', 1); buildShop(note);
+}
+function openShop() { sfx('ui'); state = 'shop'; buildShop(''); showScreen('scr-shop'); $('shop-items').scrollTop = 0; }
+function closeShop() { sfx('ui'); state = 'levels'; buildLevels(); showScreen('scr-levels'); }
 function goLevels() { clearInterval(typeTimer); G = null; state = 'levels'; Msg.clear(); buildLevels(); showScreen('scr-levels'); sfx('setSong', 'title'); sfx('setBoss', false); sfx('ambience', null); }
 function pauseGame() { if (state !== 'play') return; state = 'paused'; Input.reset(); syncToggles(); showScreen('scr-pause'); sfx('ui'); }
 function resumeGame() { if (state !== 'paused') return; state = 'play'; Input.reset(); showScreen(null); }
@@ -4049,7 +4226,7 @@ function drawFrame(dt, report) {
   try {
     c.setTransform(DPR * SCALE, 0, 0, DPR * SCALE, 0, 0); c.globalAlpha = 1;
     if (G && (state === 'play' || state === 'paused' || state === 'result')) { renderGame(c); drawHUD(c); Msg.draw(c); drawBanner(c); if (state === 'play') drawControls(c); }
-    else renderTitle(c, dt);
+    else { renderTitle(c, dt); if (state === 'shop') drawShopPreview(); }
   } catch (err) { report(err); }
   try { renderFx(dt); } catch (err) { report(err); }
 }
@@ -4081,6 +4258,9 @@ function boot() {
   document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play' && !window.KP_TEST) pauseGame(); if (!document.hidden) { wakeLock = null; keepAwake(); } });
   $('btn-start').addEventListener('click', () => { sfx('init'); sfx('ui'); sfx('start'); sfx('setSong', 'title'); goFullscreen(); keepAwake(); cloudTransition(goLevels, { butterflies: true }); });
   $('btn-back').addEventListener('click', () => { sfx('ui'); cloudTransition(() => { state = 'title'; showScreen('scr-title'); }, { quick: true }); });
+  $('btn-shop').addEventListener('click', openShop);
+  $('shop-back').addEventListener('click', closeShop);
+  $('shop-items').addEventListener('click', (e) => { const b = e.target.closest('[data-act]'); if (b && !b.disabled) shopAct(b.dataset.act); });
   $('btn-resume').addEventListener('click', () => { sfx('ui'); resumeGame(); });
   $('btn-restart').addEventListener('click', () => { sfx('ui'); const i = G ? G.li : 0; cloudTransition(() => startLevel(i), { quick: true }); });
   $('btn-quit').addEventListener('click', () => { sfx('ui'); cloudTransition(goLevels, { quick: true }); });
@@ -4090,7 +4270,7 @@ function boot() {
   showScreen('scr-title');
   requestAnimationFrame(frame);
   ['forest', 'village', 'keep'].forEach((n, i) => setTimeout(() => { try { buildTheme(n); } catch (e) { console.error(e); } }, 600 + i * 350));   // paint the lands while the title shows
-  if (window.KP_TEST || /test/.test(location.hash)) window.KP = { startLevel, startBoss, startWave, get G() { return G; }, save, Snd, Input, tick: testTick };
+  if (window.KP_TEST || /test/.test(location.hash)) window.KP = { startLevel, startBoss, startWave, get G() { return G; }, get state() { return state; }, save, Snd, Input, tick: testTick, openShop, shopAct, drinkPotion: () => G && drinkPotion(G.hero) };
 }
 boot();
 
