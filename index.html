@@ -149,6 +149,10 @@ i.coin { display: inline-block; width: .9em; height: .9em; border-radius: 50%; b
 .ibtn:active:not(:disabled) { transform: translateY(2px); box-shadow: none; }
 .ibtn:focus-visible { outline: 3px solid #e9d7a9; outline-offset: 2px; }
 
+/* world map: the lands drawn on old parchment (the canvas is painted by the game) */
+.map { position: static; inset: auto; width: min(92vw, calc((100dvh - 150px) * 2.5), 720px); height: auto; aspect-ratio: 5 / 2; cursor: pointer; image-rendering: pixelated;
+  border: 3px solid #5b4128; border-radius: 4px; box-shadow: inset 0 0 0 2px rgba(176, 141, 79, .5), 0 10px 26px rgba(0, 0, 0, .5); touch-action: manipulation; }
+
 /* trophies: brass medals with illuminated initials, and a parchment toast when one is earned */
 .troph-list { width: min(760px, 100%); flex: 0 1 auto; min-height: 0; margin-block: 10px; padding-block: 8px; }
 .troph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
@@ -191,12 +195,13 @@ i.coin { display: inline-block; width: .9em; height: .9em; border-radius: 50%; b
 
 <section id="scr-levels" class="screen" data-screen hidden>
   <h2 class="ribbon">Choose your quest</h2>
-  <div id="cards" class="cards"></div>
+  <canvas id="map" class="map" width="600" height="240" role="img" aria-label="Map of the lands"></canvas>
   <div class="row">
     <button id="btn-back" class="btn wood small" type="button">Back</button>
     <span class="purse" aria-label="Coins"><i class="coin"></i><span id="coin-total">0</span></span>
     <button id="btn-shop" class="btn brass small" type="button">Shop</button>
     <button id="btn-troph" class="btn brass small" type="button">Trophies</button>
+    <button id="btn-begin" class="btn big small" type="button">Begin</button>
   </div>
 </section>
 
@@ -2458,8 +2463,8 @@ function catGear(g, nx, ny, hx, hy) {
 function drawCat(ctx, k) {
   const Q = CAT, st = k.state, ground = k.groundY != null ? k.groundY : k.y;
   let ax = 2, ay = -10, bx = 3, by = -18;
-  shadowAt(ctx, k.x, 8, ground);
-  spr(ctx, k.x, k.y, k.face);
+  shadowAt(ctx, k.x, 8 * (k.s || 1), ground);
+  spr(ctx, k.x, k.y, k.face, k.s ? { s: k.s } : null);
   if (st === 'run' || st === 'return') {
     const ph = k.anim * 16, a = Math.sin(ph), b = Math.cos(ph), up = Math.round(Math.abs(a));
     line(6, -6, 6 + a * 3, 0, Q.d, 2); line(-6, -6, -6 - a * 3, 0, Q.d, 2);
@@ -4065,21 +4070,78 @@ function syncToggles() {
 
 /* ---------- level select ---------- */
 function buildLevels() {
-  const box = $('cards'); box.textContent = '';
-  LEVELS.forEach((L, i) => {
-    const locked = i + 1 > save.unlocked, st = save.stars[i] || 0, b = document.createElement('button');
-    let thumb = ''; try { thumb = themeThumb(L.theme); } catch (e) { /* plain card */ }
-    b.type = 'button'; b.id = 'lvl-' + (i + 1); b.className = 'card ' + L.tag + (locked ? ' locked' : ''); b.disabled = locked;
-    b.setAttribute('aria-label', 'Level ' + (i + 1) + ', ' + L.name + ', ' + L.diff + (locked ? ', locked' : ', ' + st + ' stars'));
-    b.innerHTML = '<span class="banner"><span class="num">' + (i + 1) + '</span><span class="scene sc-' + L.theme + '"' + (thumb ? ' style="background-image:url(' + thumb + ')"' : '') + '></span><span class="lname">' + L.name +
-      '</span><span class="diff">' + L.diff + '</span><span class="stars">' + [0, 1, 2].map((k) => '<i class="' + (k < st ? 'on' : '') + '"></i>').join('') +
-      '</span></span>' + (locked ? '<span class="lock" aria-hidden="true"></span>' : '');
-    b.addEventListener('click', () => { sfx('ui'); cloudTransition(() => (i === 0 && !save.introSeen ? startStory() : startLevel(i)), { quick: true }); });
-    box.appendChild(b);
-  });
+  const top = Math.min(save.unlocked, LEVELS.length) - 1;   // the knight waits on the newest land
+  MapS.sel = top; MapS.d0 = MapS.d1 = landD(top); MapS.t = 1;
+  $('map').setAttribute('aria-label', 'Map of the lands. ' + LEVELS.map((L, i) => L.name + (i + 1 > save.unlocked ? ', locked' : ', ' + (save.stars[i] || 0) + ' stars')).join('. '));
+  $('btn-begin').textContent = 'Begin';
   $('coin-total').textContent = save.coins;
   if (save.coins >= 300) award('rich');
 }
+/* ---------- the world map: an old parchment map. Tap a land to walk there (0.6 s), tap it again or press Begin ---------- */
+const MAPW = 300, MAPH = 120, MAP_PTS = [[56, 92], [78, 100], [104, 97], [126, 82], [150, 74], [176, 80], [200, 96], [226, 100], [246, 90]], MAP_AT = [0, 4, 8];
+const MapS = { buf: null, len: null, sel: 0, d0: 0, d1: 0, t: 1 };
+function mapLens() { if (!MapS.len) { const L = [0]; for (let i = 1; i < MAP_PTS.length; i++) L.push(L[i - 1] + Math.hypot(MAP_PTS[i][0] - MAP_PTS[i - 1][0], MAP_PTS[i][1] - MAP_PTS[i - 1][1])); MapS.len = L; } return MapS.len; }
+function mapPoint(d) { const L = mapLens(); let i = 1; while (i < L.length - 1 && L[i] < d) i++; const k = clamp((d - L[i - 1]) / (L[i] - L[i - 1]), 0, 1), a = MAP_PTS[i - 1], b = MAP_PTS[i]; return [lerp(a[0], b[0], k), lerp(a[1], b[1], k)]; }
+const landD = (i) => mapLens()[MAP_AT[i]], mapCur = () => lerp(MapS.d0, MapS.d1, easeInOut(MapS.t));
+function beginLevel(i) { sfx('ui'); cloudTransition(() => (i === 0 && !save.introSeen ? startStory() : startLevel(i)), { quick: true }); }
+function mapGo(i) {
+  if (i < 0 || i >= LEVELS.length || Trans.active) return;
+  if (i + 1 > save.unlocked) { sfx('ui'); return; }                                  // locked: a dull knock
+  if (i === MapS.sel && MapS.t >= 1) { beginLevel(i); return; }
+  sfx('step'); MapS.d0 = mapCur(); MapS.d1 = landD(i); MapS.t = 0; MapS.sel = i;
+}
+function landArt(i, x, y) {
+  if (i === 0) {          // Misty Woods: pines in the mist
+    for (const [dx, dy, h] of [[-15, -4, 14], [-7, -9, 18], [3, -7, 16], [12, -3, 13], [-2, 0, 12]]) { const tx = x + dx, ty = y + dy; poly([tx, ty - h, tx - 6, ty, tx + 6, ty], '#3f5a38'); poly([tx, ty - h, tx + 6, ty, tx + 1, ty], '#56744b'); rect(tx - 1, ty, 2, 2, '#5a4330'); }
+    for (let j = 0; j < 3; j++) rect(x - 20 + j * 10, y - 9 + j * 3, 11, 1, 'rgba(245,244,238,.75)');
+  } else if (i === 1) {   // Harvest Village: cottages, fields and a windmill
+    for (const hx of [x - 19, x - 6]) { const hy = hx < x - 10 ? y : y - 2; rect(hx, hy - 8, 11, 8, '#d9c7a0'); poly([hx - 2, hy - 8, hx + 5.5, hy - 14, hx + 13, hy - 8], '#8a3b33'); rect(hx + 4, hy - 5, 3, 5, '#5a4330'); dot(hx + 8, hy - 6, '#e8c870'); }
+    poly([x + 8, y, x + 10, y - 20, x + 15, y - 20, x + 17, y], '#d8c9a4'); rect(x + 11, y - 5, 3, 5, '#5a4330');
+    const a = T * 1.6; for (let q = 0; q < 4; q++) line(x + 12, y - 20, x + 12 + Math.cos(a + q * 1.5708) * 10, y - 20 + Math.sin(a + q * 1.5708) * 10, '#6b4f36');
+    rect(x - 30, y + 1, 10, 3, '#cfa64e'); rect(x + 20, y, 9, 3, '#b9a05a');
+  } else {                // Stone Keep: walls, two towers and a red flag
+    rect(x - 14, y - 18, 28, 18, '#8e8c90'); rect(x - 14, y - 18, 28, 2, '#a9a7ab'); for (let j = 0; j < 7; j++) rect(x - 14 + j * 4, y - 21, 2, 3, '#8e8c90');
+    rect(x - 20, y - 26, 8, 26, '#7c7a80'); rect(x + 12, y - 26, 8, 26, '#7c7a80');
+    poly([x - 21, y - 26, x - 16, y - 34, x - 11, y - 26], '#5e3a5a'); poly([x + 11, y - 26, x + 16, y - 34, x + 21, y - 26], '#5e3a5a');
+    rect(x - 3, y - 9, 6, 9, '#2a2420'); dot(x - 17, y - 18, '#2a2420'); dot(x + 15, y - 18, '#2a2420');
+    line(x + 16, y - 34, x + 16, y - 40, '#4a3a2a'); rect(x + 17, y - 40, 5, 3, Math.sin(T * 5) > 0 ? '#8a3b33' : '#9a4a3e');
+  }
+}
+function paintMap(b) {
+  b.setTransform(1, 0, 0, 1, 0, 0); b.globalAlpha = 1; b.fillStyle = '#e6d6ae'; b.fillRect(0, 0, MAPW, MAPH); spr(b, 0, 0, 1);
+  for (let i = 0; i < 170; i++) dot((hash(i) * MAPW) | 0, (hash(i + 400) * MAPH) | 0, i % 3 ? '#dccb9f' : '#d0bd8e');      // parchment grain
+  oval(28, 52, 30, 9, '#dac99e'); oval(132, 40, 36, 9, '#dac99e'); oval(272, 50, 30, 10, '#dac99e');                       // hills
+  for (let x = 84; x < 126; x++) dot(x, 30 + Math.round(Math.sin(x / 7) * 3) + ((x - 84) >> 1), '#93a6a8');                  // a little river
+  const L = mapLens(); for (let d = 0; d < L[L.length - 1]; d += 5) { const p = mapPoint(d); rect(Math.round(p[0]) - 1, Math.round(p[1]), 2, 1, '#7a5a3a'); }
+  LEVELS.forEach((Lv, i) => {
+    const p = MAP_PTS[MAP_AT[i]], locked = i + 1 > save.unlocked; b.globalAlpha = locked ? 0.38 : 1; landArt(i, p[0], p[1] - 8); b.globalAlpha = 1;
+    if (locked) { const x = p[0], y = p[1] - 24; rect(x - 4, y, 8, 6, '#3a3532'); rect(x - 3, y - 4, 1, 4, '#2a2624'); rect(x + 2, y - 4, 1, 4, '#2a2624'); rect(x - 2, y - 5, 4, 1, '#2a2624'); dot(x, y + 2, '#c9a24e'); }
+  });
+  const d = mapCur(), q = mapPoint(d), moving = MapS.t < 1, face = moving && MapS.d1 < MapS.d0 ? -1 : 1, ph = T * 10, s0 = LOOKS.hero.s;
+  if (save.stars[2] > 0) { const k = mapPoint(d - face * 12); drawCat(b, { x: k[0], y: k[1], face, state: moving ? 'run' : 'sit', anim: T * 0.4, t: 0, s: 0.6 }); }
+  LOOKS.hero.s = 0.6; shadowAt(b, q[0], 6, q[1]);
+  drawKnight(b, q[0], q[1], face, moving ? { feet: [Math.sin(ph) * 4, -Math.max(0, Math.cos(ph)) * 3, -Math.sin(ph) * 4, -Math.max(0, -Math.cos(ph)) * 3], cape: 0.5, weapon: 'sword', arm: 0.85, reach: 0.75, wpn: -1.1 }
+    : { cape: 0.25 + Math.sin(T * 2) * 0.1, weapon: 'sword', arm: 0.35, wpn: -1.45, reach: 0.7 }, SWORDS[clamp(save.unlocked - 1, 0, 2)]);
+  LOOKS.hero.s = s0;
+}
+function drawMap(dt) {
+  const cv = $('map'), w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return;
+  const pw = Math.round(w * DPR), ph = Math.round(h * DPR); if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
+  if (!MapS.buf) MapS.buf = mkCanvas(MAPW, MAPH);
+  MapS.t = Math.min(1, MapS.t + dt / 0.6); paintMap(MapS.buf.getContext('2d'));
+  const g = cv.getContext('2d'), k = pw / MAPW; g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = false; g.drawImage(MapS.buf, 0, 0, pw, ph);
+  g.textAlign = 'center'; g.textBaseline = 'top';
+  LEVELS.forEach((L, i) => {   // names and earned stars, drawn sharp at full resolution
+    const p = MAP_PTS[MAP_AT[i]], x = p[0] * k, y = (p[1] + 3) * k, locked = i + 1 > save.unlocked, st = save.stars[i] || 0;
+    g.font = Math.round(8 * k) + 'px "Jacquarda Bastarda 9", Georgia, serif'; g.fillStyle = locked ? 'rgba(94,36,29,.45)' : i === MapS.sel ? '#7a2e27' : '#5e241d'; g.fillText(L.name, x, y);
+    for (let s = 0; s < 3; s++) {
+      const sx = x + (s - 1) * 7 * k, sy = y + 13 * k, r = 2.6 * k; g.fillStyle = s < st ? '#c9a24e' : 'rgba(90,77,61,.45)'; g.beginPath();
+      for (let j = 0; j < 10; j++) { const a = -Math.PI / 2 + (j * Math.PI) / 5, rr2 = j % 2 ? r * 0.45 : r; g.lineTo(sx + Math.cos(a) * rr2, sy + Math.sin(a) * rr2); }
+      g.closePath(); g.fill();
+    }
+  });
+}
+
 /* ---------- the coin shop: potions, armor, capes and Kitty's gear ---------- */
 const SHOPV = { buf: null, thumbs: {} };
 function shopPaint(b, w, h, o) {   // the knight and/or Kitty in the equipped look, drawn with the game's own art
@@ -4393,7 +4455,7 @@ function drawFrame(dt, report) {
     c.setTransform(DPR * SCALE, 0, 0, DPR * SCALE, 0, 0); c.globalAlpha = 1;
     if (state === 'story') renderStory(c, dt);
     else if (G && (state === 'play' || state === 'paused' || state === 'result')) { renderGame(c); drawWeather(c, state === 'play' ? dt : 0); drawHUD(c); Msg.draw(c); drawBanner(c); if (state === 'play') drawControls(c); }
-    else { renderTitle(c, dt); if (state === 'shop') drawShopPreview(); }
+    else { renderTitle(c, dt); if (state === 'shop') drawShopPreview(); else if (state === 'levels') drawMap(dt); }
   } catch (err) { report(err); }
   try { renderFx(dt); } catch (err) { report(err); }
 }
@@ -4428,6 +4490,13 @@ function boot() {
   $('btn-shop').addEventListener('click', openShop);
   $('shop-back').addEventListener('click', closeShop);
   $('btn-troph').addEventListener('click', openTrophies);
+  $('btn-begin').addEventListener('click', () => { if (!Trans.active) beginLevel(MapS.sel); });
+  $('map').addEventListener('click', (e) => {   // pick the land nearest to the tap
+    const r = e.currentTarget.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * MAPW, y = ((e.clientY - r.top) / r.height) * MAPH;
+    let best = -1, bd = 34; MAP_AT.forEach((pi, i) => { const p = MAP_PTS[pi], d = Math.hypot(x - p[0], (y - (p[1] - 10)) * 0.8); if (d < bd) { bd = d; best = i; } });
+    if (best >= 0) mapGo(best);
+  });
+  window.addEventListener('keydown', (e) => { if (state !== 'levels') return; if (e.code === 'ArrowLeft') mapGo(MapS.sel - 1); else if (e.code === 'ArrowRight') mapGo(MapS.sel + 1); });
   $('troph-back').addEventListener('click', closeShop);
   cvs.addEventListener('pointerdown', () => { if (state === 'story' && Story.t > 0.25) endStory(); });
   window.addEventListener('keydown', () => { if (state === 'story' && Story.t > 0.25) endStory(); });
