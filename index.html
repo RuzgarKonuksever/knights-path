@@ -182,6 +182,7 @@ i.coin { display: inline-block; width: .9em; height: .9em; border-radius: 50%; b
     <div id="res-stats" class="stats"></div>
     <div class="row">
       <button id="res-main" class="btn leaf" type="button">Next level</button>
+      <button id="res-restart" class="btn wood" type="button" hidden>Restart level</button>
       <button id="res-levels" class="btn wood" type="button">Levels</button>
     </div>
   </div>
@@ -215,6 +216,8 @@ const MESSAGES = {
   catReturns:    ["Kitty! You came back!"],
   defeat:        ["You fell... but a true knight always rises again."],
   defeatAgain:   ["Tip: block with your shield, then strike when they miss."],
+  checkpoint:    ["Back to wave {w}. You can do it!"],
+  checkpointBoss: ["Back to face {boss}. You can do it!"],
   levelComplete: ["Victory! The land is a little safer."],
   swordUpgrade:  ["Your sword is now {sword}!"],
   gameComplete:  ["The dragon is defeated. The kingdom is saved!"],
@@ -228,7 +231,7 @@ const SPEAKER_NAME = { king: 'The King', knight: 'Sir Knight' };
 /* ---------- world (1 world unit = 1 pixel of the pixel-art buffer) ---------- */
 const H = 360, GROUND = 300, WORLD_W = 960;
 const GRAV = 1500, JUMP = 560, SPEED = 185, HEART_HP = 20;
-const ZOOM = 1.25, VIEW_Y0 = Math.round(GROUND - 318 / ZOOM);   // fight camera
+const ZOOM = 1.35, VIEW_Y0 = Math.round(GROUND - 318 / ZOOM);   // fight camera
 
 const LEVELS = [
   { name: 'Misty Woods', diff: 'Easy', tag: 'easy', theme: 'forest', song: 'meadow', sword: 0,
@@ -293,6 +296,7 @@ let G = null;                 // the running level
 let T = 0;                    // global clock (seconds)
 let touchMode = false;
 const deathCount = [0, 0, 0];
+let checkpoint = null;        // last wave / boss start of the running level: { li, wave, boss, coins, time, arrows } (not saved)
 
 /* =====================================================================
    AUDIO — everything is synthesized live with WebAudio (no sound files)
@@ -2439,14 +2443,17 @@ const SWING = [
 ];
 const NOINP = { x: 0, y: 0, hit: false, hitHeld: false, swap: false, aim: null };
 
-function startLevel(i) {
+/* cp: continue from a checkpoint (skips the intro); without it the level starts from the beginning */
+function startLevel(i, cp) {
   const L = LEVELS[i], th = buildTheme(L.theme);
-  G = { li: i, L, th, t: 0, time: 0, hero: makeHero(), enemies: [], projs: [], pickups: [], parts: [], dust: [], fx: [], texts: [],
-        amb: makeAmbient(th), phase: 'intro', phaseT: 0, waveIdx: -1, queue: [], spawnT: 0, spawnSide: 1,
-        boss: null, egg: null, banner: null, cat: null, pet: null, cut: true, coins: 0, camX: 0, lastCam: 0, shake: 0, kx: 0, ky: 0,
-        hitstop: 0, slow: 1, slowT: 0, flash: 0, heartHit: 0, said: {}, flags: {} };
+  if (!cp) checkpoint = null;
+  G = { li: i, L, th, t: 0, time: cp ? cp.time : 0, hero: makeHero(), enemies: [], projs: [], pickups: [], parts: [], dust: [], fx: [], texts: [],
+        amb: makeAmbient(th), phase: cp ? 'checkpoint' : 'intro', phaseT: 0, waveIdx: -1, queue: [], spawnT: 0, spawnSide: 1,
+        boss: null, egg: null, banner: null, cat: null, pet: null, cut: true, coins: cp ? cp.coins : 0, camX: 0, lastCam: 0, shake: 0, kx: 0, ky: 0,
+        hitstop: 0, slow: 1, slowT: 0, flash: 0, heartHit: 0, said: {}, flags: {}, cp: cp || null };
   const h = G.hero;
-  G.cat = i === 0 ? { x: h.x + 16, y: GROUND, face: -1, state: 'sit', t: 0, anim: 0 } : null;   // the cat only greets you in level 1
+  G.cat = i === 0 && !cp ? { x: h.x + 16, y: GROUND, face: -1, state: 'sit', t: 0, anim: 0 } : null;   // the cat only greets you at the start of level 1
+  if (cp) { h.arrows = Math.max(12, cp.arrows || 0); if (cp.boss) placeBoss(); }   // full hearts, at least 12 arrows, the boss already waits
   const vw = VW / ZOOM; G.camX = vw >= WORLD_W ? (WORLD_W - vw) / 2 : clamp(h.x - vw / 2, 0, WORLD_W - vw); G.lastCam = G.camX;
   state = 'play'; showScreen(null); Msg.clear(); Input.reset();
   sfx('setSong', L.song); sfx('setBoss', false); sfx('ambience', L.theme);
@@ -3258,7 +3265,7 @@ function smoke(x, y, n) {
 /* ---------- level flow ---------- */
 function updatePhase(dt) {
   const L = G.L;
-  if (G.phase === 'intro' && Trans.blocking) return;   // wait until the clouds have cleared
+  if ((G.phase === 'intro' || G.phase === 'checkpoint') && Trans.blocking) return;   // wait until the clouds have cleared
   G.phaseT += dt; const t = G.phaseT;
   switch (G.phase) {
     case 'intro':
@@ -3267,6 +3274,13 @@ function updatePhase(dt) {
       if (G.flags.pet && !G.pet && G.cut) { G.cut = false; if (G.li === 0 && !save.tutorial) { save.tutorial = true; persist(); say('tutorial'); } }
       if (t > (G.cat ? 3.5 : 2.2)) startWave(0);
       break;
+    case 'checkpoint': {   // continuing after a defeat: no intro, straight back into the wave or the boss fight
+      const cp = G.cp;
+      if (!G.flags.hello) { G.flags.hello = true; G.cut = false; say(cp.boss ? 'checkpointBoss' : 'checkpoint', { w: cp.wave + 1 }); }
+      if (!cp.boss) { if (t > 0.5) startWave(cp.wave); }
+      else if (t > 0.2 && !G.flags.roar) { G.flags.roar = true; bossRoar(G.boss); }
+      break;
+    }
     case 'wave': {
       G.spawnT -= dt; const alive = G.enemies.filter((e) => !e.boss).length;
       if (G.queue.length && G.spawnT <= 0 && alive < L.maxAlive) { spawnNext(); G.spawnT = rand(0.7, 1.2); }
@@ -3284,7 +3298,7 @@ function updatePhase(dt) {
   }
 }
 function startWave(i) {
-  G.waveIdx = i; G.phase = 'wave'; G.phaseT = 0; G.queue = G.L.waves[i].slice(); G.spawnT = 0.9; G.cut = false;
+  G.waveIdx = i; G.phase = 'wave'; G.phaseT = 0; G.queue = G.L.waves[i].slice(); G.spawnT = 0.9; G.cut = false; setCheckpoint(false);
   sfx('horn'); say('waveStart', { w: i + 1 });
   if (i === 0) scareCat();
 }
@@ -3297,7 +3311,7 @@ function spawnNext() {
   if (type === 'crow') sfx('caw');
 }
 function startBoss() {
-  G.phase = 'bossIntro'; G.phaseT = 0; sfx('setBoss', true);
+  G.phase = 'bossIntro'; G.phaseT = 0; sfx('setBoss', true); setCheckpoint(true);
   const L = G.L, h = G.hero;
   if (L.boss === 'dragon') { G.egg = { x: clamp(h.x + (h.x < WORLD_W / 2 ? 230 : -230), 120, WORLD_W - 120), y: -90, vy: 0, landed: false, wob: 0, stage: 0, glow: 0, lt: 0 }; say('dragonEgg'); return; }
   const b = makeBoss(L.boss); G.boss = b; G.enemies.push(b);
@@ -3305,14 +3319,31 @@ function startBoss() {
   else { b.enterDir = h.x > WORLD_W / 2 ? 1 : -1; b.x = b.enterDir > 0 ? -70 : WORLD_W + 70; b.state = 'enter'; }
   say('bossAppear');
 }
-function bossBanner(b) { G.banner = { text: b.name, sub: 'Boss', t: 0 }; b.showHud = true; }
+function bossBanner(b, t0) { G.banner = { text: b.name, sub: 'Boss', t: t0 || 0 }; b.showHud = true; }   // t0 > 0: a shorter flash
 function bossReady(b) { b.invuln = false; b.showHud = true; G.phase = 'boss'; G.phaseT = 0; }
+
+/* ---------- checkpoints: the start of every wave and of the boss intro (kept until the level is won or started over) ---------- */
+function setCheckpoint(boss) { checkpoint = { li: G.li, wave: G.waveIdx, boss, coins: G.coins, time: G.time, arrows: G.hero.arrows }; }
+/* continuing at the boss checkpoint skips the entrance: the boss already stands (or flies) in the arena */
+function placeBoss() {
+  const h = G.hero, b = makeBoss(G.L.boss); G.boss = b; G.enemies.push(b);
+  b.x = clamp(h.x + (h.x < WORLD_W / 2 ? 240 : -240), 80, WORLD_W - 80); b.face = Math.sign(h.x - b.x) || -1; b.state = 'ready';
+  if (b.type === 'dragon') { b.landed = false; b.tx = b.x; b.ty = b.y = DRAKE_Y + 26; }   // flying, in sight below the King's scroll
+}
+/* the short beat before a continued boss fight: one roar (the dark knight laughs) and a quick banner, then it attacks after 1 s */
+function bossRoar(b) {
+  sfx('setBoss', true); b.state = 'roar'; b.t = 1.0; b.showHud = true;
+  if (b.type !== 'dragon') bossBanner(b, 1.0);   // the banner would hide the flying dragon
+  if (b.type === 'darkknight') { sfx('laugh'); return; }
+  sfx('roar', b.type); G.shake = 10; buzz(100); if (b.type === 'dragon') b.mouth = 1;
+}
 
 /* ---------- Grumbold the Ogre ---------- */
 function aiOgre(e, dt) {
   const h = G.hero, dx = h.x - e.x, dist = Math.abs(dx), enr = e.phase2, spd = enr ? 80 : 60;
   const wasAir = !e.onGround; physics(e, dt, false); const landed = wasAir && e.onGround;
   switch (e.state) {
+    case 'ready': e.vx = 0; e.face = Math.sign(dx) || e.face; break;   // continued fight: already in the arena, waiting to roar
     case 'enter':
       e.face = e.enterDir; e.vx = e.enterDir * 62; e.stepT -= dt;
       if (e.stepT <= 0) { e.stepT = 0.42; sfx('stomp'); G.shake = Math.max(G.shake, 3); dust(e.x, e.y, 5, true); }
@@ -3353,6 +3384,10 @@ function aiDK(e, dt) {
   const wasAir = !e.onGround; physics(e, dt, false); const landed = wasAir && e.onGround;
   e.dashT -= dt; e.leapT -= dt; e.waveT -= dt;
   switch (e.state) {
+    case 'ready': case 'roar':   // continued fight: already out of the smoke, one laugh, then it fights
+      e.vx = 0; e.face = Math.sign(dx) || e.face;
+      if (e.state === 'roar' && (e.t -= dt) <= 0) { e.state = 'walk'; bossReady(e); }
+      break;
     case 'appear':
       e.t += dt; e.face = Math.sign(dx) || -1;
       if (e.t < 1.0 && Math.random() < 0.8) smoke(e.x, e.y, 1);
@@ -3432,8 +3467,9 @@ function hatchEgg(g) {
   G.enemies.push(b); G.boss = b;
 }
 function moveToward(e, tx, ty, dt, sp) { const dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy); if (d < 0.5) return; const s = Math.min(d, sp * dt); e.x += (dx / d) * s; e.y += (dy / d) * s; }
-function pickHover(e) { const left = G.hero.x - G.camX < VW / 2; e.tx = clamp(G.camX + (left ? VW * 0.75 : VW * 0.25), 80, WORLD_W - 80); e.ty = rand(148, 168); }
-function setupSwoop(e) { const h = G.hero, from = e.x > h.x ? 1 : -1; e.sx0 = clamp(h.x + from * 300, 60, WORLD_W - 60); e.sy0 = 152; e.sx1 = clamp(h.x - from * 300, 40, WORLD_W - 40); }
+const DRAKE_Y = 174;   // top of the dragon's hover band (world y), kept below the HUD
+function pickHover(e) { const left = G.hero.x - G.camX < VW / 2; e.tx = clamp(G.camX + (left ? VW * 0.75 : VW * 0.25), 80, WORLD_W - 80); e.ty = rand(DRAKE_Y, DRAKE_Y + 20); }
+function setupSwoop(e) { const h = G.hero, from = e.x > h.x ? 1 : -1; e.sx0 = clamp(h.x + from * 300, 60, WORLD_W - 60); e.sy0 = DRAKE_Y + 4; e.sx1 = clamp(h.x - from * 300, 40, WORLD_W - 40); }
 function fireVolley(e) {
   const h = G.hero, n = e.phase2 ? 5 : 3, mx = e.x + e.face * 66, my = e.y - 48, a0 = Math.atan2(h.y - 20 - my, h.x - mx), sp = e.phase2 ? 330 : 290;
   for (let i = 0; i < n; i++) { const a = a0 + (i - (n - 1) / 2) * 0.2; G.projs.push({ kind: 'fireball', x: mx, y: my, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: 13 * G.L.dm, life: 4, r: 6 }); }
@@ -3443,6 +3479,11 @@ function aiDragon(e, dt) {
   const h = G.hero, p2 = e.phase2;
   e.flap += dt * (e.landed ? 2.5 : 7);
   switch (e.state) {
+    case 'ready': case 'roar':   // continued fight: already grown and flying, one roar, then it attacks
+      moveToward(e, e.tx, e.ty + Math.sin(e.anim * 2) * 10, dt, 200); e.face = Math.sign(h.x - e.x) || e.face;
+      e.flapS = (e.flapS || 0) - dt; if (e.flapS <= 0) { e.flapS = 0.9; sfx('flap'); }
+      if (e.state === 'roar' && (e.t -= dt) <= 0) { e.mouth = 0; e.state = 'hover'; e.t = 0.8; pickHover(e); bossReady(e); }
+      break;
     case 'hatch':
       e.t += dt; e.scale = lerp(0.35, 1, easeOut(clamp(e.t / 1.1, 0, 1))); e.y = GROUND; e.landed = true;
       if (Math.random() < 0.4) part({ kind: 'ember', x: e.x + rand(-40, 40), y: e.y - rand(10, 70), vx: 0, vy: -30, life: 0.6, size: 1, color: pick(['#f6d27a', '#f2a24a']) });
@@ -3451,7 +3492,7 @@ function aiDragon(e, dt) {
       break;
     case 'takeoff':
       e.vy = approach(e.vy, -200, 600 * dt); e.y += e.vy * dt;
-      if (e.y <= 162) { e.vy = 0; e.state = 'hover'; e.t = 1.0; pickHover(e); if (G.phase === 'bossIntro') bossReady(e); }
+      if (e.y <= DRAKE_Y + 14) { e.vy = 0; e.state = 'hover'; e.t = 1.0; pickHover(e); if (G.phase === 'bossIntro') bossReady(e); }
       break;
     case 'hover': {
       moveToward(e, e.tx, e.ty + Math.sin(e.anim * 2) * 10, dt, 200); e.face = Math.sign(h.x - e.x) || e.face; e.t -= dt;
@@ -3493,7 +3534,7 @@ function aiDragon(e, dt) {
       if (Math.random() < 0.06) part({ kind: 'puff', x: e.x + e.face * 66, y: e.y - 46, vx: e.face * 10, vy: -20, life: 0.8, size: 1.5, grow: 5, color: '#5a5250', drag: 1 });
       if (e.t <= 0) { e.tired = false; e.state = 'takeoff2'; e.landed = false; e.vy = 0; sfx('flap'); dust(e.x, e.y, 10, true); }
       break;
-    case 'takeoff2': e.headY = lerp(e.headY, 0, 0.1); e.vy = approach(e.vy, -220, 700 * dt); e.y += e.vy * dt; if (e.y <= 166) { e.vy = 0; e.state = 'hover'; e.t = 1.0; pickHover(e); } break;
+    case 'takeoff2': e.headY = lerp(e.headY, 0, 0.1); e.vy = approach(e.vy, -220, 700 * dt); e.y += e.vy * dt; if (e.y <= DRAKE_Y + 18) { e.vy = 0; e.state = 'hover'; e.t = 1.0; pickHover(e); } break;
   }
   if (p2 && !e.summoned && G.phase === 'boss') { e.summoned = true; for (const x of [40, WORLD_W - 40]) { const b = makeEnemy('crow', x); b.y = 120; G.enemies.push(b); puff(x, 120, 6, '#3a3436'); } sfx('caw'); }
   if (e.landed && e.state !== 'hatch') touchHero(e, 6 * G.L.dm);
@@ -3545,7 +3586,7 @@ function finishLevel(win) {
     const hpOk = h.hp >= h.maxHp * 0.5, parOk = G.time <= L.par, stars = 1 + (hpOk ? 1 : 0) + (parOk ? 1 : 0);
     save.stars[i] = Math.max(save.stars[i] || 0, stars); save.coins += G.coins;
     if (i + 1 < LEVELS.length) save.unlocked = Math.max(save.unlocked, i + 2);
-    persist(); deathCount[i] = 0;
+    persist(); deathCount[i] = 0; checkpoint = null;
     showResult({ win: true, level: i, stars, hpOk, parOk, coins: G.coins, time: G.time });
   } else { deathCount[i]++; showResult({ win: false, level: i, deaths: deathCount[i] }); }
 }
@@ -3854,6 +3895,7 @@ function typeInto(el, text) {
 function showResult(r) {
   state = 'result'; Msg.clear(); Input.reset();
   const L = LEVELS[r.level], last = r.level === LEVELS.length - 1, stars = $('res-stars').children;
+  const cp = !r.win && checkpoint && checkpoint.li === r.level ? checkpoint : null;   // defeated: continue from the last wave / boss
   for (const s of stars) s.classList.remove('on');
   $('res-title').textContent = r.win ? (last ? 'Victory!' : 'Level Complete!') : 'Defeated';
   $('res-stars').hidden = !r.win; $('res-goals').hidden = !r.win;
@@ -3869,10 +3911,12 @@ function showResult(r) {
   } else {
     text = sayText(r.deaths >= 2 ? 'defeatAgain' : 'defeat');
     $('res-stats').innerHTML = '';
-    $('res-main').textContent = 'Try again';
-    $('res-main').onclick = () => { sfx('ui'); cloudTransition(() => startLevel(r.level), { quick: true }); };
+    $('res-main').textContent = !cp ? 'Try again' : cp.boss ? 'Continue from the Boss' : 'Continue from Wave ' + (cp.wave + 1);
+    $('res-main').onclick = () => { sfx('ui'); cloudTransition(() => startLevel(r.level, cp), { quick: true }); };
+    $('res-restart').onclick = () => { sfx('ui'); cloudTransition(() => startLevel(r.level), { quick: true }); };
     sfx('defeat');
   }
+  $('res-restart').hidden = !cp;
   $('res-msg').textContent = '';
   showScreen('scr-result');
   setTimeout(() => { if (state === 'result') typeInto($('res-msg'), text); }, 250);
